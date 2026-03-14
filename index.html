@@ -266,12 +266,17 @@
                         <form id="edit-form">
                             <div class="form-group">
                                 <label class="form-label" for="edit-inicio">Fecha de Inicio</label>
-                                <input type="text" id="edit-inicio" class="form-input" placeholder="ej: 01/enero/2026">
+                                <input type="text" id="edit-inicio" class="form-input" placeholder="ej: 01/enero/2026" oninput="actualizarDiasModal()">
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label" for="edit-final">Fecha Final</label>
-                                <input type="text" id="edit-final" class="form-input" placeholder="ej: 15/febrero/2026">
+                                <input type="text" id="edit-final" class="form-input" placeholder="ej: 15/febrero/2026" oninput="actualizarDiasModal()">
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Días calculados</label>
+                                <span id="edit-dias" style="font-size:0.9rem; color: var(--accent-green, #00D9A3);">-</span>
                             </div>
 
                             <button type="submit" class="btn btn-primary btn-full">Guardar Fechas</button>
