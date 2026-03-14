@@ -32,8 +32,8 @@ const librosOriginales = [
         resumen: "Un pueblo vive en tensión política y social cuando empiezan a aparecer pasquines anónimos revelando secretos de los habitantes.",
         estado: "Leyendo",
         inicio: "24/febrero/2026",
-        final: "09/marzo/2026",
-        dias: 13,
+        final: null,
+        dias: null,
         portada: null
     },
     {
@@ -54,7 +54,7 @@ const librosOriginales = [
         resumen: "La obra maestra. La saga de la familia Buendía a lo largo de siete generaciones en el mítico pueblo de Macondo.",
         estado: "Leído",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -65,7 +65,7 @@ const librosOriginales = [
         resumen: "Reportaje periodístico novelado sobre la supervivencia de un marinero que cayó al mar y sobrevivió diez días sin comida ni agua.",
         estado: "Pendiente",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -76,7 +76,7 @@ const librosOriginales = [
         resumen: "Relato sobre una joven explotada cruelmente por su abuela, quien la obliga a prostituirse para pagar una deuda absurda.",
         estado: "Pendiente",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -87,7 +87,7 @@ const librosOriginales = [
         resumen: "Una novela compleja sobre la soledad del poder absoluto, centrada en un dictador eterno en una nación caribeña ficticia.",
         estado: "Pendiente",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -98,7 +98,7 @@ const librosOriginales = [
         resumen: "Reconstrucción del asesinato de Santiago Nasar, un crimen que todo el pueblo sabía que iba a ocurrir pero nadie impidió.",
         estado: "Pendiente",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -109,7 +109,7 @@ const librosOriginales = [
         resumen: "La historia de amor y perseverancia de Florentino Ariza, quien espera más de 50 años para estar con Fermina Daza.",
         estado: "Leído",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -120,7 +120,7 @@ const librosOriginales = [
         resumen: "Reportaje sobre la entrada secreta del cineasta exiliado Miguel Littín a Chile durante la dictadura de Pinochet.",
         estado: "Leído",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -131,7 +131,7 @@ const librosOriginales = [
         resumen: "Novela histórica que narra los últimos días de Simón Bolívar, mostrando su faceta más humana, enferma y derrotada.",
         estado: "Pendiente",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -142,7 +142,7 @@ const librosOriginales = [
         resumen: "Compilación de cuentos sobre latinoamericanos viviendo en Europa, explorando temas de desarraigo y extrañeza.",
         estado: "Pendiente",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -153,7 +153,7 @@ const librosOriginales = [
         resumen: "En la época colonial, una niña mordida por un perro es recluida en un convento por supuesta posesión, donde surge un amor prohibido.",
         estado: "Pendiente",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -164,7 +164,7 @@ const librosOriginales = [
         resumen: "Crónica periodística detallada sobre los secuestros realizados por el Cartel de Medellín y Pablo Escobar en los años 90.",
         estado: "Pendiente",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -175,7 +175,7 @@ const librosOriginales = [
         resumen: "Autobiografía de sus años de infancia y juventud, fundamental para entender el origen de sus historias.",
         estado: "Pendiente",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -186,7 +186,7 @@ const librosOriginales = [
         resumen: "Un anciano periodista decide regalarse una noche de amor con una adolescente virgen por su 90 cumpleaños, encontrando un amor inesperado.",
         estado: "Leído",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     },
@@ -197,7 +197,7 @@ const librosOriginales = [
         resumen: "(Póstuma) Ana Magdalena Bach viaja cada agosto a la isla donde está enterrada su madre y cada visita se convierte en una oportunidad para reinventarse.",
         estado: "Pendiente",
         inicio: null,
-        final: "09/marzo/2026",
+        final: null,
         dias: null,
         portada: null
     }

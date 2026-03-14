@@ -75,9 +75,9 @@ async function onLogin(usuario) {
     ocultarPantallaLogin();
     actualizarUIUsuario(usuario);
 
-    // Cargar datos del usuario desde Supabase y refrescar UI
+    // Migrar datos locales si aplica, cargar desde Supabase y refrescar UI
+    await migrarDesdeLocalStorage();
     await window.gaboApp.cargarDatos();
-    window.gaboApp.inicializarEventListeners();
     window.gaboApp.actualizarInterfaz();
 }
 

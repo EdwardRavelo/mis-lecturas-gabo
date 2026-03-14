@@ -12,26 +12,28 @@ let eventListenersInicializados = false;
 // Inicialización
 // ========================================
 document.addEventListener('DOMContentLoaded', async () => {
-    // Inicializar autenticación si Supabase está configurado
+    // Registrar listeners una sola vez al arrancar
+    inicializarEventListeners();
+
     if (supabaseConfigurado) {
+        // inicializarAuth registra onAuthStateChange y recupera sesión activa
         const usuario = await inicializarAuth();
 
         if (!usuario) {
-            // No hay sesión activa → mostrar pantalla de login
+            // No hay sesión activa → mostrar pantalla de login y esperar
             mostrarPantallaLogin();
-            return;
+            // onAuthStateChange en auth.js manejará el login cuando ocurra
+        } else {
+            // Ya hay sesión (ej: recarga de página con sesión activa)
+            await migrarDesdeLocalStorage();
+            await cargarDatos();
+            actualizarInterfaz();
         }
-
-        // Hay sesión activa → migrar localStorage si aplica y cargar datos
-        await migrarDesdeLocalStorage();
-        await cargarDatos();
     } else {
         // Modo offline: usar localStorage directamente
-        cargarDatos();
+        await cargarDatos();
+        actualizarInterfaz();
     }
-
-    inicializarEventListeners();
-    actualizarInterfaz();
 
     // Actualizar días para libros "Leyendo" cada minuto
     setInterval(actualizarDiasEnProceso, 60000);
