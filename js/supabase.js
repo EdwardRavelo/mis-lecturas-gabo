@@ -8,8 +8,9 @@
 const SUPABASE_URL = 'https://qzkgnapnwcklstqaavxj.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6a2duYXBud2NrbHN0cWFhdnhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NTQyMjAsImV4cCI6MjA4OTAzMDIyMH0.lLlLkU5ZpG2eX4voFgep63DSj7VPxbTTkuoHJ-5S6M8';
 
-// Inicializar cliente Supabase (cargado via CDN en index.html)
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Inicializar cliente Supabase
+// Usamos 'supabaseClient' para no colisionar con el objeto global 'supabase' del CDN
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Verificar que las credenciales fueron configuradas
 function verificarConfiguracion() {

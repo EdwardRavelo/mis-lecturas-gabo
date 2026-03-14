@@ -16,7 +16,7 @@ async function inicializarAuth() {
 
     // Escuchar cambios de sesión FUTUROS (login, logout)
     // INITIAL_SESSION se ignora aquí porque lo manejamos con getSession()
-    supabase.auth.onAuthStateChange(async (event, session) => {
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
         console.log('[Auth] evento:', event);
 
         if (event === 'SIGNED_IN') {
@@ -36,7 +36,7 @@ async function inicializarAuth() {
     });
 
     // Recuperar sesión activa al cargar (source of truth)
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await supabaseClient.auth.getSession();
     usuarioActual = session?.user ?? null;
     return usuarioActual;
 }
@@ -46,7 +46,7 @@ async function inicializarAuth() {
 // ----------------------------------------
 
 async function loginConGitHub() {
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'github',
         options: {
             redirectTo: window.location.origin + window.location.pathname
@@ -59,7 +59,7 @@ async function loginConGitHub() {
 }
 
 async function loginConGoogle() {
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
         options: {
             redirectTo: window.location.origin + window.location.pathname
@@ -72,7 +72,7 @@ async function loginConGoogle() {
 }
 
 async function cerrarSesion() {
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabaseClient.auth.signOut();
     if (error) {
         console.error('Error al cerrar sesión:', error.message);
     }

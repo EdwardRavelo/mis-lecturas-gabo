@@ -20,7 +20,7 @@
 async function cargarLecturasDB() {
     if (!supabaseConfigurado || !usuarioActual) return null;
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
         .from('lecturas_usuario')
         .select('*')
         .eq('user_id', usuarioActual.id);
@@ -52,7 +52,7 @@ async function guardarLecturaDB(libroIndex, campos) {
     };
 
     // Upsert: inserta si no existe, actualiza si ya existe (por user_id + libro_id)
-    const { error } = await supabase
+    const { error } = await supabaseClient
         .from('lecturas_usuario')
         .upsert(payload, { onConflict: 'user_id,libro_id' });
 
@@ -82,7 +82,7 @@ async function guardarTodasLecturasDB(libros) {
         updated_at: new Date().toISOString()
     }));
 
-    const { error } = await supabase
+    const { error } = await supabaseClient
         .from('lecturas_usuario')
         .upsert(payload, { onConflict: 'user_id,libro_id' });
 
@@ -133,7 +133,7 @@ async function migrarDesdeLocalStorage() {
     if (!datosLocales) return;
 
     // Verificar si el usuario ya tiene datos en DB
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
         .from('lecturas_usuario')
         .select('id')
         .eq('user_id', usuarioActual.id)
