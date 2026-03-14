@@ -1,0 +1,512 @@
+/* ========================================
+   Animaciones Cinematográficas - Realismo Mágico
+   ======================================== */
+
+/* ========================================
+   Fade In Cinematográfico
+   ======================================== */
+.fade-in {
+    animation: fadeIn 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Fade in escalonado para cards - Efecto cascada cinematográfico */
+.book-card {
+    animation: fadeInUp 0.8s cubic-bezier(0.23, 1, 0.32, 1) backwards;
+}
+
+.book-card:nth-child(1) { animation-delay: 0.05s; }
+.book-card:nth-child(2) { animation-delay: 0.1s; }
+.book-card:nth-child(3) { animation-delay: 0.15s; }
+.book-card:nth-child(4) { animation-delay: 0.2s; }
+.book-card:nth-child(5) { animation-delay: 0.25s; }
+.book-card:nth-child(6) { animation-delay: 0.3s; }
+.book-card:nth-child(7) { animation-delay: 0.35s; }
+.book-card:nth-child(8) { animation-delay: 0.4s; }
+.book-card:nth-child(9) { animation-delay: 0.45s; }
+.book-card:nth-child(10) { animation-delay: 0.5s; }
+.book-card:nth-child(11) { animation-delay: 0.55s; }
+.book-card:nth-child(12) { animation-delay: 0.6s; }
+.book-card:nth-child(13) { animation-delay: 0.65s; }
+.book-card:nth-child(14) { animation-delay: 0.7s; }
+.book-card:nth-child(15) { animation-delay: 0.75s; }
+.book-card:nth-child(16) { animation-delay: 0.8s; }
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(40px) scale(0.9);
+        filter: blur(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+}
+
+/* ========================================
+   Hover Effects - Interacciones Cinematográficas
+   ======================================== */
+
+/* Optimización de performance */
+.book-card,
+.stat-item,
+.filter-btn,
+.chart-container-small {
+    will-change: transform;
+}
+
+/* Resplandor dorado en hover de cards */
+.book-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 50% 0%, 
+        rgba(139, 105, 20, 0.08) 0%, 
+        rgba(212, 165, 116, 0.04) 40%, 
+        transparent 70%);
+    opacity: 0;
+    transition: opacity 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+    pointer-events: none;
+    z-index: 2;
+}
+
+.book-card:hover::after {
+    opacity: 1;
+}
+
+/* Efecto de profundidad en sidebar items */
+.stat-item,
+.filter-btn {
+    transition: 
+        transform 0.4s cubic-bezier(0.23, 1, 0.32, 1),
+        box-shadow 0.4s cubic-bezier(0.23, 1, 0.32, 1),
+        border-color 0.3s ease;
+}
+
+/* ========================================
+   Loading Animation
+   ======================================== */
+.loading {
+    display: inline-block;
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(139, 69, 19, 0.2);
+    border-top-color: #8B4513;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ========================================
+   Pulse Animation - Respiración Sutil
+   ======================================== */
+.status-leyendo {
+    animation: breathe 3s ease-in-out infinite;
+}
+
+@keyframes breathe {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 rgba(212, 165, 116, 0);
+    }
+    50% {
+        transform: scale(1.03);
+        box-shadow: 0 0 8px rgba(212, 165, 116, 0.4);
+    }
+}
+
+/* ========================================
+   Shake Animation para errores
+   ======================================== */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.shake {
+    animation: shake 0.5s ease-in-out;
+}
+
+/* ========================================
+   Modal - Entrada Dramática
+   ======================================== */
+.modal.active .modal-content {
+    animation: modalDramaticEnter 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes modalDramaticEnter {
+    from {
+        opacity: 0;
+        transform: translateY(-80px) scale(0.85) rotateX(10deg);
+        filter: blur(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotateX(0deg);
+        filter: blur(0);
+    }
+}
+
+/* ========================================
+   Glow Effect - Resplandor Orgánico
+   ======================================== */
+.timeline-dot.leido {
+    animation: glowGreen 3s ease-in-out infinite;
+}
+
+.timeline-dot.leyendo {
+    animation: glowGolden 2.5s ease-in-out infinite;
+}
+
+@keyframes glowGreen {
+    0%, 100% {
+        box-shadow: 
+            0 2px 8px rgba(44, 36, 22, 0.15),
+            0 0 0 rgba(58, 125, 68, 0);
+    }
+    50% {
+        box-shadow: 
+            0 4px 12px rgba(44, 36, 22, 0.2),
+            0 0 20px rgba(58, 125, 68, 0.6);
+    }
+}
+
+@keyframes glowGolden {
+    0%, 100% {
+        box-shadow: 
+            0 2px 8px rgba(44, 36, 22, 0.15),
+            0 0 0 rgba(212, 165, 116, 0);
+    }
+    50% {
+        box-shadow: 
+            0 4px 16px rgba(44, 36, 22, 0.25),
+            0 0 24px rgba(212, 165, 116, 0.7);
+    }
+}
+
+/* ========================================
+   Typing Effect para Quote (Header)
+   ======================================== */
+.quote {
+    animation: fadeInText 1.5s ease-in 0.5s backwards;
+}
+
+@keyframes fadeInText {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 0.85;
+        transform: translateX(0);
+    }
+}
+
+/* ========================================
+   Floating Effect - Levitación Sutil
+   ======================================== */
+.stat-item {
+    animation: floatGentle 5s ease-in-out infinite;
+}
+
+.stat-item:nth-child(1) { animation-delay: 0s; }
+.stat-item:nth-child(2) { animation-delay: 0.4s; }
+.stat-item:nth-child(3) { animation-delay: 0.8s; }
+.stat-item:nth-child(4) { animation-delay: 1.2s; }
+.stat-item:nth-child(5) { animation-delay: 1.6s; }
+
+@keyframes floatGentle {
+    0%, 100% {
+        transform: translateY(0px);
+    }
+    50% {
+        transform: translateY(-4px);
+    }
+}
+
+/* ========================================
+   Scale In para Filtros
+   ======================================== */
+.filter-btn {
+    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.filter-btn.active {
+    animation: scaleIn 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes scaleIn {
+    0% {
+        transform: scale(0.8);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* ========================================
+   Shimmer Effect - Brillo Papel Envejecido
+   ======================================== */
+.book-cover-wrapper.loading {
+    background: linear-gradient(
+        110deg,
+        rgba(237, 234, 222, 1) 0%,
+        rgba(212, 201, 176, 0.8) 20%,
+        rgba(245, 241, 232, 1) 40%,
+        rgba(237, 234, 222, 1) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmerPaper 2s infinite ease-in-out;
+}
+
+@keyframes shimmerPaper {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* ========================================
+   Bounce para Botones
+   ======================================== */
+.btn:active {
+    animation: btnBounce 0.3s ease;
+}
+
+@keyframes btnBounce {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(0.95);
+    }
+}
+
+/* ========================================
+   Page Load Animation - Entrada Cinematográfica
+   ======================================== */
+body {
+    animation: pageLoad 1s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes pageLoad {
+    from {
+        opacity: 0;
+        filter: blur(8px);
+    }
+    to {
+        opacity: 1;
+        filter: blur(0);
+    }
+}
+
+/* Entrada escalonada del sidebar */
+.sidebar-header {
+    animation: slideInLeft 0.8s cubic-bezier(0.23, 1, 0.32, 1) 0.2s backwards;
+}
+
+.stats-compact {
+    animation: slideInLeft 0.8s cubic-bezier(0.23, 1, 0.32, 1) 0.3s backwards;
+}
+
+.sidebar-filters {
+    animation: slideInLeft 0.8s cubic-bezier(0.23, 1, 0.32, 1) 0.4s backwards;
+}
+
+.sidebar-search {
+    animation: slideInLeft 0.8s cubic-bezier(0.23, 1, 0.32, 1) 0.5s backwards;
+}
+
+.sidebar-charts {
+    animation: slideInLeft 0.8s cubic-bezier(0.23, 1, 0.32, 1) 0.6s backwards;
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Entrada del contenido principal */
+.section-header {
+    animation: fadeInDown 0.8s cubic-bezier(0.23, 1, 0.32, 1) 0.3s backwards;
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Entrada de acciones rápidas al hover */
+@keyframes quickActionsAppear {
+    from {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ========================================
+   Scroll Animations (aparecer al hacer scroll)
+   ======================================== */
+.timeline-section,
+.charts-section {
+    opacity: 0;
+    animation: fadeInOnScroll 0.8s ease-out 0.2s forwards;
+}
+
+@keyframes fadeInOnScroll {
+    from {
+        opacity: 0;
+        transform: translateY(40px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ========================================
+   Reducción de movimiento (Accesibilidad)
+   ======================================== */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ========================================
+   Transiciones Cinematográficas
+   ======================================== */
+
+/* Transición fluida para cambios de estado */
+.book-status,
+.filter-btn,
+.stat-item {
+    transition: 
+        background-color 0.4s cubic-bezier(0.23, 1, 0.32, 1),
+        color 0.4s cubic-bezier(0.23, 1, 0.32, 1),
+        border-color 0.4s cubic-bezier(0.23, 1, 0.32, 1),
+        transform 0.4s cubic-bezier(0.23, 1, 0.32, 1),
+        box-shadow 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Transición dramática de imágenes */
+.book-cover {
+    transition: 
+        transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1),
+        filter 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.book-card:hover .book-cover {
+    filter: brightness(1.08) contrast(1.08) saturate(1.15);
+}
+
+/* Efecto ripple dorado en botones */
+.btn {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle, 
+        rgba(196, 162, 74, 0.4) 0%, 
+        rgba(139, 105, 20, 0.2) 100%);
+    transform: translate(-50%, -50%);
+    transition: 
+        width 0.8s cubic-bezier(0.23, 1, 0.32, 1), 
+        height 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.btn:active::before {
+    width: 400px;
+    height: 400px;
+}
+
+/* Transición de bordes decorativos */
+.section-header::after,
+.filter-title::after {
+    transition: width 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.section-header:hover::after {
+    width: 150px;
+}
+
+/* Parallax sutil en scroll */
+@media (prefers-reduced-motion: no-preference) {
+    .book-card {
+        transform-style: preserve-3d;
+    }
+    
+    .book-cover-wrapper {
+        transition: transform 0.3s ease-out;
+    }
+}
+
+/* ========================================
+   Animación de números (CountUp effect)
+   ======================================== */
+.stat-number {
+    animation: countUp 0.8s ease-out;
+}
+
+@keyframes countUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
