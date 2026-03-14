@@ -5,6 +5,7 @@
 // Estado global de la aplicación
 let libros = [];
 let filtroActual = 'Todos';
+let vistaActual = 'grid'; // 'grid' | 'list'
 let libroEditando = null;
 let eventListenersInicializados = false;
 
@@ -323,17 +324,19 @@ function crearCardLibro(libro, index) {
         </div>
     `;
 
+    // Click en cualquier parte de la card abre el modal
+    card.addEventListener('click', (e) => {
+        // Ignorar si el click fue en un botón de acción rápida
+        if (e.target.closest('.quick-action-btn')) return;
+        abrirModalEdicion(card.dataset.index);
+    });
+
     const actionButtons = card.querySelectorAll('.quick-action-btn');
     actionButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             cambiarEstadoRapido(card.dataset.index, btn.dataset.action);
         });
-    });
-
-    const bookInfo = card.querySelector('.book-info');
-    bookInfo.addEventListener('click', () => {
-        abrirModalEdicion(card.dataset.index);
     });
 
     return card;
@@ -371,18 +374,25 @@ function renderizarTimeline() {
 
     timeline.innerHTML = '<div class="timeline-line"></div>';
 
-    libros.forEach(libro => {
+    libros.forEach((libro, index) => {
         const item = document.createElement('div');
         item.className = 'timeline-item';
 
         const dotClass = libro.estado === 'Leído' ? 'leido' :
                         libro.estado === 'Leyendo' ? 'leyendo' : '';
 
+        const statusClass = libro.estado === 'Leído' ? 'leido' :
+                           libro.estado === 'Leyendo' ? 'leyendo' : 'pendiente';
+
         item.innerHTML = `
             <div class="timeline-dot ${dotClass}"></div>
             <div class="timeline-year">${libro.año}</div>
             <div class="timeline-title">${libro.titulo}</div>
+            <span class="timeline-status ${statusClass}">${libro.estado}</span>
         `;
+
+        // Click en timeline abre modal del libro
+        item.addEventListener('click', () => abrirModalEdicion(index));
 
         timeline.appendChild(item);
     });
@@ -547,18 +557,62 @@ function formatearFechaEspañol(fecha) {
 }
 
 // ========================================
+// Aplicar filtro (desde sidebar o desde stat-items)
+// ========================================
+function aplicarFiltro(filtro) {
+    filtroActual = filtro;
+    // Sincronizar botones del sidebar
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    filterButtons.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === filtro);
+    });
+    renderizarLibros();
+}
+
+// ========================================
 // Event Listeners
 // ========================================
 function inicializarEventListeners() {
     if (eventListenersInicializados) return;
     eventListenersInicializados = true;
 
-    // Filtros
+    // Toggle vista grid / lista
+    const viewBtns = document.querySelectorAll('.view-btn');
+    viewBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            viewBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            vistaActual = btn.dataset.view;
+            const grid = document.getElementById('books-grid');
+            if (grid) {
+                grid.classList.toggle('view-list', vistaActual === 'list');
+            }
+        });
+    });
+
+    // Click en estadísticas → filtra por estado
+    const statItems = document.querySelectorAll('.stat-item');
+    statItems.forEach(item => {
+        item.classList.add('clickeable');
+        const filtro = item.dataset.filter;
+        if (!filtro) return;
+        item.addEventListener('click', () => {
+            // Activar el filtro correspondiente
+            aplicarFiltro(filtro);
+            // Highlight visual en stat-item
+            statItems.forEach(s => s.classList.remove('active'));
+            item.classList.add('active');
+        });
+    });
+
+    // Filtros del sidebar
     const filterButtons = document.querySelectorAll('.filter-btn');
     filterButtons.forEach(btn => {
         btn.addEventListener('click', () => {
             filterButtons.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+            // Quitar highlight de stat-items al usar filtros del sidebar
+            document.querySelectorAll('.stat-item').forEach(s => s.classList.remove('active'));
             filtroActual = btn.dataset.filter;
             renderizarLibros();
         });
