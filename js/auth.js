@@ -115,7 +115,7 @@ function ocultarPantallaLogin() {
     const loginScreen = document.getElementById('login-screen');
     const appLayout = document.querySelector('.library-layout');
     if (loginScreen) loginScreen.classList.remove('active');
-    if (appLayout) appLayout.style.display = '';
+    if (appLayout) appLayout.style.display = 'flex';
 }
 
 function actualizarUIUsuario(usuario) {
