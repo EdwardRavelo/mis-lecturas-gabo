@@ -5,21 +5,25 @@
 
 -- Tabla principal de lecturas por usuario
 CREATE TABLE IF NOT EXISTS lecturas_usuario (
-    id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    libro_id    INTEGER NOT NULL,                       -- índice 0-based del catálogo en data.js
-    estado      TEXT NOT NULL DEFAULT 'Pendiente'
-                    CHECK (estado IN ('Leído', 'Leyendo', 'Pendiente')),
-    inicio      TEXT,                                   -- formato: DD/mes/YYYY (ej: 01/enero/2026)
-    final       TEXT,                                   -- formato: DD/mes/YYYY
-    dias        INTEGER,
-    portada     TEXT,                                   -- URL cacheada de Google Books
-    updated_at  TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    created_at  TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    libro_id     INTEGER NOT NULL,                       -- índice 0-based del catálogo en data.js
+    estado       TEXT NOT NULL DEFAULT 'Pendiente'
+                     CHECK (estado IN ('Leído', 'Leyendo', 'Pendiente')),
+    inicio       TEXT,                                   -- formato: DD/mes/YYYY (ej: 01/enero/2026)
+    final        TEXT,                                   -- formato: DD/mes/YYYY
+    dias         INTEGER,
+    portada      TEXT,                                   -- URL cacheada de Google Books
+    comentarios  TEXT,                                   -- notas personales, frases, reflexiones
+    updated_at   TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    created_at   TIMESTAMPTZ DEFAULT NOW() NOT NULL,
 
     -- Cada usuario solo puede tener un registro por libro
     CONSTRAINT lecturas_usuario_unique UNIQUE (user_id, libro_id)
 );
+
+-- Agregar columna comentarios si ya existe la tabla (para migraciones)
+ALTER TABLE lecturas_usuario ADD COLUMN IF NOT EXISTS comentarios TEXT;
 
 -- Índice para consultas rápidas por usuario
 CREATE INDEX IF NOT EXISTS idx_lecturas_user_id ON lecturas_usuario(user_id);

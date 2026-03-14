@@ -1,17 +1,17 @@
 // ========================================
 // Base de Datos - Supabase
-// Mis Lecturas Gabo
 // ========================================
 // Tabla: lecturas_usuario
-//   id          uuid (PK, auto)
-//   user_id     uuid (FK → auth.users)
-//   libro_id    integer (índice del catálogo en data.js, 0-based)
-//   estado      text ('Leído' | 'Leyendo' | 'Pendiente')
-//   inicio      text (formato DD/mes/YYYY, nullable)
-//   final       text (formato DD/mes/YYYY, nullable)
-//   dias        integer (nullable)
-//   portada     text (URL cacheada, nullable)
-//   updated_at  timestamptz (auto)
+//   id           uuid (PK, auto)
+//   user_id      uuid (FK → auth.users)
+//   libro_id     integer (índice del catálogo en data.js, 0-based)
+//   estado       text ('Leído' | 'Leyendo' | 'Pendiente')
+//   inicio       text (formato DD/mes/YYYY, nullable)
+//   final        text (formato DD/mes/YYYY, nullable)
+//   dias         integer (nullable)
+//   portada      text (URL cacheada, nullable)
+//   comentarios  text (notas personales, nullable)
+//   updated_at   timestamptz (auto)
 
 // ----------------------------------------
 // Cargar lecturas del usuario desde Supabase
@@ -48,6 +48,7 @@ async function guardarLecturaDB(libroIndex, campos) {
         final: campos.final ?? null,
         dias: campos.dias ?? null,
         portada: campos.portada ?? null,
+        comentarios: campos.comentarios ?? null,
         updated_at: new Date().toISOString()
     };
 
@@ -79,6 +80,7 @@ async function guardarTodasLecturasDB(libros) {
         final: libro.final ?? null,
         dias: libro.dias ?? null,
         portada: libro.portada ?? null,
+        comentarios: libro.comentarios ?? null,
         updated_at: new Date().toISOString()
     }));
 
@@ -112,7 +114,8 @@ function fusionarConCatalogo(lecturasDB) {
                 inicio: lectura.inicio,
                 final: lectura.final,
                 dias: lectura.dias,
-                portada: lectura.portada ?? libroBase.portada
+                portada: lectura.portada ?? libroBase.portada,
+                comentarios: lectura.comentarios ?? null
             };
         }
 

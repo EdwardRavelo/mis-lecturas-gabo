@@ -253,10 +253,10 @@
                     </div>
                 </div>
 
-                <!-- Edición avanzada (colapsable) -->
+                <!-- Fechas (colapsable) -->
                 <div class="modal-section">
                     <button class="modal-toggle-advanced" id="toggle-advanced">
-                        <span>Edición Avanzada</span>
+                        <span>Editar Fechas</span>
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
                             <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
                         </svg>
@@ -281,6 +281,23 @@
 
                             <button type="submit" class="btn btn-primary btn-full">Guardar Fechas</button>
                         </form>
+                    </div>
+                </div>
+
+                <!-- Comentarios y frases del libro -->
+                <div class="modal-section">
+                    <h3 class="modal-section-title">Mis comentarios</h3>
+                    <div class="comentarios-container">
+                        <textarea
+                            id="edit-comentarios"
+                            class="comentarios-textarea"
+                            placeholder="Anota tus pensamientos, frases favoritas, reflexiones sobre este libro..."
+                            rows="5"
+                        ></textarea>
+                        <button class="btn-guardar-comentarios" id="btn-guardar-comentarios" type="button">
+                            Guardar comentarios
+                        </button>
+                        <span class="comentarios-saved" id="comentarios-saved">¡Guardado!</span>
                     </div>
                 </div>
             </div>

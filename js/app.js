@@ -376,24 +376,24 @@ function renderizarTimeline() {
 
     libros.forEach((libro, index) => {
         const item = document.createElement('div');
-        item.className = 'timeline-item';
 
-        const dotClass = libro.estado === 'Leído' ? 'leido' :
-                        libro.estado === 'Leyendo' ? 'leyendo' : '';
+        const estadoClass = libro.estado === 'Leído' ? 'leido' :
+                            libro.estado === 'Leyendo' ? 'leyendo' : 'pendiente';
 
-        const statusClass = libro.estado === 'Leído' ? 'leido' :
-                           libro.estado === 'Leyendo' ? 'leyendo' : 'pendiente';
+        // clase en el item para controlar colores de año y título via CSS
+        item.className = `timeline-item ${estadoClass}`;
+
+        const statusLabel = libro.estado === 'Leído' ? 'leido' :
+                            libro.estado === 'Leyendo' ? 'leyendo' : 'pendiente';
 
         item.innerHTML = `
-            <div class="timeline-dot ${dotClass}"></div>
+            <div class="timeline-dot ${estadoClass === 'pendiente' ? '' : estadoClass}"></div>
             <div class="timeline-year">${libro.año}</div>
             <div class="timeline-title">${libro.titulo}</div>
-            <span class="timeline-status ${statusClass}">${libro.estado}</span>
+            <span class="timeline-status ${statusLabel}">${libro.estado}</span>
         `;
 
-        // Click en timeline abre modal del libro
         item.addEventListener('click', () => abrirModalEdicion(index));
-
         timeline.appendChild(item);
     });
 }
@@ -446,6 +446,27 @@ function abrirModalEdicion(index) {
     document.getElementById('edit-index').value = index;
     document.getElementById('edit-inicio').value = libro.inicio || '';
     document.getElementById('edit-final').value = libro.final || '';
+
+    // Cargar comentarios del libro
+    const comentariosEl = document.getElementById('edit-comentarios');
+    const savedEl = document.getElementById('comentarios-saved');
+    if (comentariosEl) {
+        comentariosEl.value = libro.comentarios || '';
+        if (savedEl) savedEl.classList.remove('visible');
+    }
+
+    // Listener del botón guardar comentarios (reemplazar cada vez para evitar duplicados)
+    const btnGuardar = document.getElementById('btn-guardar-comentarios');
+    if (btnGuardar) {
+        btnGuardar.onclick = async () => {
+            libros[libroEditando].comentarios = comentariosEl.value || null;
+            await guardarLectura(libroEditando);
+            if (savedEl) {
+                savedEl.classList.add('visible');
+                setTimeout(() => savedEl.classList.remove('visible'), 2000);
+            }
+        };
+    }
 
     const actionButtons = document.querySelectorAll('.modal-action-btn');
     actionButtons.forEach(btn => {
