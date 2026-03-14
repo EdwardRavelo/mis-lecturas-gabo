@@ -12,22 +12,26 @@ let eventListenersInicializados = false;
 // Inicialización
 // ========================================
 document.addEventListener('DOMContentLoaded', async () => {
-    // Registrar listeners una sola vez al arrancar
+    // Registrar listeners de UI una sola vez
     inicializarEventListeners();
 
     if (supabaseConfigurado) {
-        // inicializarAuth registra onAuthStateChange y recupera sesión activa
+        // inicializarAuth: registra onAuthStateChange y obtiene sesión actual
         const usuario = await inicializarAuth();
 
-        if (!usuario) {
-            // No hay sesión activa → mostrar pantalla de login y esperar
-            mostrarPantallaLogin();
-            // onAuthStateChange en auth.js manejará el login cuando ocurra
-        } else {
-            // Ya hay sesión (ej: recarga de página con sesión activa)
+        if (usuario) {
+            // Sesión activa desde el inicio (recarga con sesión, o post-OAuth redirect)
+            console.log('[App] Sesión activa al cargar, mostrando app...');
+            ocultarPantallaLogin();
+            actualizarUIUsuario(usuario);
             await migrarDesdeLocalStorage();
             await cargarDatos();
             actualizarInterfaz();
+        } else {
+            // Sin sesión → mostrar login
+            // onAuthStateChange manejará el SIGNED_IN futuro
+            console.log('[App] Sin sesión, mostrando login...');
+            mostrarPantallaLogin();
         }
     } else {
         // Modo offline: usar localStorage directamente

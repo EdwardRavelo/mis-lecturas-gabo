@@ -6,24 +6,36 @@
 let usuarioActual = null;
 
 // ----------------------------------------
-// Estado de sesión
+// Inicialización de Auth
+// Retorna el usuario si hay sesión activa, null si no.
+// También configura el listener para cambios futuros.
 // ----------------------------------------
 
 async function inicializarAuth() {
     if (!supabaseConfigurado) return null;
 
-    // Escuchar cambios de sesión (login, logout, token refresh)
+    // Escuchar cambios de sesión FUTUROS (login, logout)
+    // INITIAL_SESSION se ignora aquí porque lo manejamos con getSession()
     supabase.auth.onAuthStateChange(async (event, session) => {
-        usuarioActual = session?.user ?? null;
+        console.log('[Auth] evento:', event);
 
         if (event === 'SIGNED_IN') {
-            await onLogin(usuarioActual);
+            // Solo actuar en SIGNED_IN si el usuario cambió
+            // (evitar doble carga si ya lo manejó getSession)
+            const nuevoUsuario = session?.user ?? null;
+            if (nuevoUsuario && nuevoUsuario.id !== usuarioActual?.id) {
+                usuarioActual = nuevoUsuario;
+                await onLogin(usuarioActual);
+            }
         } else if (event === 'SIGNED_OUT') {
+            usuarioActual = null;
             onLogout();
+        } else if (event === 'TOKEN_REFRESHED') {
+            usuarioActual = session?.user ?? null;
         }
     });
 
-    // Recuperar sesión activa al cargar
+    // Recuperar sesión activa al cargar (source of truth)
     const { data: { session } } = await supabase.auth.getSession();
     usuarioActual = session?.user ?? null;
     return usuarioActual;
@@ -71,18 +83,18 @@ async function cerrarSesion() {
 // ----------------------------------------
 
 async function onLogin(usuario) {
-    console.log('Sesión iniciada:', usuario.email || usuario.id);
+    console.log('[Auth] Sesión iniciada:', usuario.email || usuario.id);
     ocultarPantallaLogin();
     actualizarUIUsuario(usuario);
 
-    // Migrar datos locales si aplica, cargar desde Supabase y refrescar UI
+    // Migrar datos locales si aplica, luego cargar desde Supabase
     await migrarDesdeLocalStorage();
     await window.gaboApp.cargarDatos();
     window.gaboApp.actualizarInterfaz();
 }
 
 function onLogout() {
-    console.log('Sesión cerrada');
+    console.log('[Auth] Sesión cerrada');
     usuarioActual = null;
     mostrarPantallaLogin();
     actualizarUIUsuario(null);
