@@ -48,9 +48,27 @@
     </div>
 
     <!-- ================================ -->
+    <!-- Header Mobile                   -->
+    <!-- ================================ -->
+    <div class="mobile-header" id="mobile-header" style="display:none;">
+        <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Abrir menú">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+        </button>
+        <span class="mobile-header-title">Gabo</span>
+        <div class="mobile-header-user" id="mobile-header-user"></div>
+    </div>
+
+    <!-- ================================ -->
     <!-- Layout Principal tipo Librería   -->
     <!-- ================================ -->
     <div class="library-layout" style="display:none;">
+        <!-- Overlay sidebar mobile -->
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
         <!-- Sidebar izquierdo -->
         <aside class="sidebar">
             <div class="sidebar-header">

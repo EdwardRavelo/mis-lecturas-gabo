@@ -107,32 +107,40 @@ function onLogout() {
 function mostrarPantallaLogin() {
     const loginScreen = document.getElementById('login-screen');
     const appLayout = document.querySelector('.library-layout');
+    const mobileHeader = document.getElementById('mobile-header');
     if (loginScreen) loginScreen.classList.add('active');
     if (appLayout) appLayout.style.display = 'none';
+    if (mobileHeader) mobileHeader.style.display = 'none';
 }
 
 function ocultarPantallaLogin() {
     const loginScreen = document.getElementById('login-screen');
     const appLayout = document.querySelector('.library-layout');
+    const mobileHeader = document.getElementById('mobile-header');
     if (loginScreen) loginScreen.classList.remove('active');
     if (appLayout) appLayout.style.display = 'flex';
+    if (mobileHeader) mobileHeader.style.display = '';
 }
 
 function actualizarUIUsuario(usuario) {
     const userAvatar = document.getElementById('user-avatar');
     const userName = document.getElementById('user-name');
     const userMenu = document.getElementById('user-menu');
+    const mobileHeaderUser = document.getElementById('mobile-header-user');
 
     if (!userAvatar || !userName) return;
 
     if (usuario) {
         const avatarUrl = usuario.user_metadata?.avatar_url;
         const nombre = usuario.user_metadata?.name || usuario.user_metadata?.full_name || usuario.email?.split('@')[0] || 'Lector';
+        const inicial = nombre.charAt(0).toUpperCase();
 
         if (avatarUrl) {
             userAvatar.innerHTML = `<img src="${avatarUrl}" alt="${nombre}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+            if (mobileHeaderUser) mobileHeaderUser.innerHTML = `<img src="${avatarUrl}" alt="${nombre}" style="width:100%;height:100%;object-fit:cover;">`;
         } else {
-            userAvatar.textContent = nombre.charAt(0).toUpperCase();
+            userAvatar.textContent = inicial;
+            if (mobileHeaderUser) mobileHeaderUser.textContent = inicial;
         }
 
         userName.textContent = nombre;
@@ -141,6 +149,7 @@ function actualizarUIUsuario(usuario) {
         userAvatar.textContent = '?';
         userName.textContent = '';
         if (userMenu) userMenu.style.display = 'none';
+        if (mobileHeaderUser) mobileHeaderUser.textContent = '';
     }
 }
 

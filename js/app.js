@@ -626,6 +626,33 @@ function inicializarEventListeners() {
         });
     });
 
+    // Mobile sidebar toggle
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const sidebarEl = document.querySelector('.sidebar');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+    function abrirSidebar() {
+        if (sidebarEl) sidebarEl.classList.add('sidebar-open');
+        if (sidebarOverlay) sidebarOverlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function cerrarSidebar() {
+        if (sidebarEl) sidebarEl.classList.remove('sidebar-open');
+        if (sidebarOverlay) sidebarOverlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', abrirSidebar);
+    if (sidebarOverlay) sidebarOverlay.addEventListener('click', cerrarSidebar);
+
+    // Cerrar sidebar con Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && sidebarEl && sidebarEl.classList.contains('sidebar-open')) {
+            cerrarSidebar();
+        }
+    });
+
     // Filtros del sidebar
     const filterButtons = document.querySelectorAll('.filter-btn');
     filterButtons.forEach(btn => {
@@ -636,6 +663,8 @@ function inicializarEventListeners() {
             document.querySelectorAll('.stat-item').forEach(s => s.classList.remove('active'));
             filtroActual = btn.dataset.filter;
             renderizarLibros();
+            // Cerrar sidebar en mobile al seleccionar filtro
+            if (window.innerWidth <= 768) cerrarSidebar();
         });
     });
 
