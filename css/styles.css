@@ -1878,11 +1878,13 @@ body {
     .main-content {
         margin-left: 0;
         padding-top: 60px;
+        overflow-x: hidden;
+        width: 100%;
     }
 
     /* ---- Secciones con menos padding ---- */
     .books-section {
-        padding: var(--space-md);
+        padding: var(--space-md) var(--space-sm);
     }
 
     .analysis-section {
@@ -1893,23 +1895,46 @@ body {
         margin-bottom: var(--space-lg);
     }
 
+    /* Eliminar decoración que desborda a la izquierda */
+    .section-header::after {
+        display: none;
+    }
+
     /* ---- Título ---- */
     .section-title {
         font-size: 1.75rem;
     }
 
-    /* ---- Grid de Libros: 2 columnas ---- */
+    /* ---- Grid de Libros: 2 columnas bien contenidas ---- */
     .books-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: var(--space-sm);
+        width: 100%;
+        box-sizing: border-box;
     }
 
     .book-card {
-        height: 220px;
+        height: 210px;
     }
 
     .book-cover-wrapper {
         height: 130px;
+    }
+
+    .book-info {
+        padding: var(--space-xs) var(--space-sm);
+        gap: 4px;
+    }
+
+    .book-pages,
+    .book-year {
+        display: none;
+    }
+
+    .book-title {
+        font-size: 0.8rem;
+        -webkit-line-clamp: 2;
+        min-height: 0;
     }
 
     /* ---- Estadísticas: 3 columnas ---- */
@@ -1945,10 +1970,9 @@ body {
         transform: none !important;
     }
 
-    /* Acciones rápidas: siempre visibles (touch no tiene hover) */
+    /* Acciones rápidas: ocultas en mobile, tap abre el modal */
     .book-card-actions {
-        opacity: 1;
-        transform: translateX(0) scale(1);
+        display: none;
     }
 
     /* ---- Modal: Bottom Sheet ---- */
