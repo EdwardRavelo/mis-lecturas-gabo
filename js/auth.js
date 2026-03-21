@@ -76,6 +76,10 @@ async function cerrarSesion() {
     if (error) {
         console.error('Error al cerrar sesión:', error.message);
     }
+    // Forzar logout en UI sin esperar el evento SIGNED_OUT
+    // (el evento puede no llegar si el token ya expiró o hay error de red)
+    usuarioActual = null;
+    onLogout();
 }
 
 // ----------------------------------------
