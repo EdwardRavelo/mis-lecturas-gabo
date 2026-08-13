@@ -1,0 +1,43 @@
+# ============================================================
+# Keep-alive de Supabase
+# ============================================================
+# El plan gratuito de Supabase pausa el proyecto tras ~7 días
+# sin actividad. Este workflow hace una consulta real a la base
+# cada día para que ese contador nunca llegue a cero.
+#
+# OJO: esto PREVIENE la pausa, no la revierte. Si el proyecto ya
+# está pausado hay que reanudarlo a mano desde el dashboard
+# (Supabase → Project → Resume); estando pausado no responde a
+# ningún ping.
+# ============================================================
+
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    # Todos los días a las 09:00 UTC.
+    # GitHub puede retrasar o saltarse ejecuciones si hay carga,
+    # por eso pinguea a diario y no cada 6 días: sobra margen.
+    - cron: '0 9 * * *'
+  # Permite lanzarlo a mano desde la pestaña Actions.
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar la base de datos
+        # La anon key ya es pública (va en js/supabase.js, se envía a
+        # todo navegador que abre la app), así que ponerla aquí no
+        # filtra nada nuevo. Lo que protege los datos es la RLS.
+        #
+        # Consultamos lecturas_usuario sin sesión: la RLS devuelve una
+        # lista vacía, pero Postgres recibe la consulta y eso es lo que
+        # cuenta como actividad. --fail hace que el job falle (y GitHub
+        # te mande un email) si el proyecto está caído o pausado.
+        run: |
+          curl --fail --silent --show-error \
+            --max-time 30 \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6a2duYXBud2NrbHN0cWFhdnhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NTQyMjAsImV4cCI6MjA4OTAzMDIyMH0.lLlLkU5ZpG2eX4voFgep63DSj7VPxbTTkuoHJ-5S6M8" \
+            "https://qzkgnapnwcklstqaavxj.supabase.co/rest/v1/lecturas_usuario?select=id&limit=1" \
+            -o /dev/null -w "OK - HTTP %{http_code} en %{time_total}s\n"
