@@ -68,8 +68,29 @@ async function inicializarAuth() {
 }
 
 // ----------------------------------------
-// Login con Google
+// Login con OAuth
 // ----------------------------------------
+// GitHub es hoy el único proveedor habilitado en el proyecto Supabase.
+// Google está en la interfaz pero dará "provider is not enabled" hasta
+// que se den de alta sus credenciales en Authentication → Providers.
+
+async function loginConGitHub() {
+    if (!supabaseConfigurado) {
+        mostrarErrorAuth('La nube no está disponible. Usa "Entrar sin conexión".');
+        return;
+    }
+
+    const { error } = await supabaseClient.auth.signInWithOAuth({
+        provider: 'github',
+        options: {
+            redirectTo: window.location.origin + window.location.pathname
+        }
+    });
+    if (error) {
+        console.error('Error al iniciar sesión con GitHub:', error.message);
+        mostrarErrorAuth('No se pudo conectar con GitHub. Puedes entrar sin conexión.');
+    }
+}
 
 async function loginConGoogle() {
     if (!supabaseConfigurado) {
@@ -231,10 +252,12 @@ function mostrarErrorAuth(mensaje) {
 // ----------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
+    const btnGitHub = document.getElementById('btn-login-github');
     const btnGoogle = document.getElementById('btn-login-google');
     const btnOffline = document.getElementById('btn-login-offline');
     const btnLogout = document.getElementById('btn-logout');
 
+    if (btnGitHub) btnGitHub.addEventListener('click', loginConGitHub);
     if (btnGoogle) btnGoogle.addEventListener('click', loginConGoogle);
     if (btnOffline) {
         btnOffline.addEventListener('click', () =>

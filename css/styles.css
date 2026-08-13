@@ -2178,15 +2178,27 @@ body {
     font-family: 'DM Sans', sans-serif;
 }
 
-/* Google es ahora el acceso principal */
-.login-btn-google {
+/* GitHub es el proveedor activo → acceso principal */
+.login-btn-github {
     background: rgba(255, 255, 255, 0.1);
     color: var(--text-primary);
 }
 
-.login-btn-google:hover {
+.login-btn-github:hover {
     background: rgba(255, 255, 255, 0.18);
     border-color: rgba(255, 255, 255, 0.32);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.login-btn-google {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+}
+
+.login-btn-google:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
     transform: translateY(-2px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }

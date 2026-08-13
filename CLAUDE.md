@@ -16,7 +16,16 @@ python -m http.server 8000
 npx serve
 ```
 
-The Supabase redirect URL must be whitelisted in the Supabase dashboard for the origin you serve from, and Google must be the enabled auth provider (GitHub was removed).
+The Supabase redirect URL must be whitelisted in the Supabase dashboard for the origin you serve from.
+
+**Only GitHub is enabled as an auth provider.** The Google button exists in the UI but the provider was never configured in the Supabase project, so it returns `{"code":400,"error_code":"validation_failed","msg":"Unsupported provider: provider is not enabled"}`. Verify a provider before touching the login UI:
+
+```bash
+curl -s "https://<project-ref>.supabase.co/auth/v1/authorize?provider=google" -H "apikey: <anon-key>"
+# 302 → enabled; 400 → not enabled
+```
+
+Enabling Google means creating an OAuth client in Google Cloud Console with `https://<project-ref>.supabase.co/auth/v1/callback` as the authorized redirect URI, then pasting the client ID/secret into Supabase → Authentication → Providers. Note that existing reading data is tied to the GitHub-created `user_id`; signing in with a different provider may create a **new** user and show an empty library until the rows are re-pointed.
 
 Verification is manual: load the page in a browser and check the console — the app logs `[Auth]` and `[App]` lifecycle events.
 
@@ -46,7 +55,7 @@ Consequences to respect when editing:
 **File responsibilities:**
 - `js/data.js` — Static catalog of the 18 books (`librosOriginales`) plus Spanish date parsing helpers. Source of truth for book metadata.
 - `js/supabase.js` — Creates `supabaseClient`. Credentials are hardcoded (anon key only — intentional; `.env.example` is documentation, nothing reads it at runtime).
-- `js/auth.js` — OAuth (**Google only**), session state, offline mode, login/logout UI swap between `#login-screen` and `.library-layout`.
+- `js/auth.js` — OAuth (GitHub & Google), session state, offline mode, login/logout UI swap between `#login-screen` and `.library-layout`.
 - `js/db.js` — CRUD against the `lecturas_usuario` table, plus `fusionarConCatalogo()` and `migrarDesdeLocalStorage()`.
 - `js/app.js` — All UI logic: state, filters, full re-render, modal, timeline, day calculations, Google Books cover fetching.
 - `js/charts.js` — Chart.js doughnut (status) and bar (pages per month) charts. Colors are hardcoded here in a dark palette, not read from CSS variables.
