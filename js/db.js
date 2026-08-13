@@ -17,20 +17,33 @@
 // Cargar lecturas del usuario desde Supabase
 // ----------------------------------------
 
+// Ninguna consulta debe poder colgar la app: si la nube no responde
+// en DB_TIMEOUT_MS, devolvemos null y el llamador usa localStorage.
+const DB_TIMEOUT_MS = 8000;
+
 async function cargarLecturasDB() {
     if (!supabaseConfigurado || !usuarioActual) return null;
 
-    const { data, error } = await supabaseClient
-        .from('lecturas_usuario')
-        .select('*')
-        .eq('user_id', usuarioActual.id);
+    try {
+        const { data, error } = await conTimeout(
+            supabaseClient
+                .from('lecturas_usuario')
+                .select('*')
+                .eq('user_id', usuarioActual.id),
+            DB_TIMEOUT_MS,
+            'cargarLecturas'
+        );
 
-    if (error) {
-        console.error('Error al cargar lecturas:', error.message);
+        if (error) {
+            console.error('Error al cargar lecturas:', error.message);
+            return null;
+        }
+
+        return data;
+    } catch (e) {
+        console.error('La nube no respondió al cargar lecturas:', e.message);
         return null;
     }
-
-    return data;
 }
 
 // ----------------------------------------
@@ -53,16 +66,25 @@ async function guardarLecturaDB(libroIndex, campos) {
     };
 
     // Upsert: inserta si no existe, actualiza si ya existe (por user_id + libro_id)
-    const { error } = await supabaseClient
-        .from('lecturas_usuario')
-        .upsert(payload, { onConflict: 'user_id,libro_id' });
+    try {
+        const { error } = await conTimeout(
+            supabaseClient
+                .from('lecturas_usuario')
+                .upsert(payload, { onConflict: 'user_id,libro_id' }),
+            DB_TIMEOUT_MS,
+            'guardarLectura'
+        );
 
-    if (error) {
-        console.error('Error al guardar lectura:', error.message);
+        if (error) {
+            console.error('Error al guardar lectura:', error.message);
+            return false;
+        }
+
+        return true;
+    } catch (e) {
+        console.error('La nube no respondió al guardar lectura:', e.message);
         return false;
     }
-
-    return true;
 }
 
 // ----------------------------------------
@@ -84,16 +106,25 @@ async function guardarTodasLecturasDB(libros) {
         updated_at: new Date().toISOString()
     }));
 
-    const { error } = await supabaseClient
-        .from('lecturas_usuario')
-        .upsert(payload, { onConflict: 'user_id,libro_id' });
+    try {
+        const { error } = await conTimeout(
+            supabaseClient
+                .from('lecturas_usuario')
+                .upsert(payload, { onConflict: 'user_id,libro_id' }),
+            DB_TIMEOUT_MS,
+            'guardarTodasLecturas'
+        );
 
-    if (error) {
-        console.error('Error al guardar lecturas en batch:', error.message);
+        if (error) {
+            console.error('Error al guardar lecturas en batch:', error.message);
+            return false;
+        }
+
+        return true;
+    } catch (e) {
+        console.error('La nube no respondió al guardar en batch:', e.message);
         return false;
     }
-
-    return true;
 }
 
 // ----------------------------------------
@@ -136,11 +167,21 @@ async function migrarDesdeLocalStorage() {
     if (!datosLocales) return;
 
     // Verificar si el usuario ya tiene datos en DB
-    const { data, error } = await supabaseClient
-        .from('lecturas_usuario')
-        .select('id')
-        .eq('user_id', usuarioActual.id)
-        .limit(1);
+    let data, error;
+    try {
+        ({ data, error } = await conTimeout(
+            supabaseClient
+                .from('lecturas_usuario')
+                .select('id')
+                .eq('user_id', usuarioActual.id)
+                .limit(1),
+            DB_TIMEOUT_MS,
+            'comprobarMigracion'
+        ));
+    } catch (e) {
+        console.error('La nube no respondió al comprobar migración:', e.message);
+        return;
+    }
 
     if (error || (data && data.length > 0)) return; // Ya tiene datos, no migrar
 
@@ -149,9 +190,8 @@ async function migrarDesdeLocalStorage() {
         const ok = await guardarTodasLecturasDB(librosLocales);
         if (ok) {
             console.log('✅ Datos migrados de localStorage a Supabase');
-            // Limpiar localStorage después de migrar exitosamente
-            localStorage.removeItem('gaboLecturas');
-            localStorage.removeItem('lastUpdated');
+            // NO borramos localStorage: a partir de aquí funciona como caché.
+            // Si la nube se cae (o el proyecto se pausa), la app arranca con esto.
         }
     } catch (e) {
         console.error('Error al migrar datos locales:', e);

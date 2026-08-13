@@ -19,9 +19,17 @@ const chartColors = {
     caribe: 'rgba(0, 217, 163, 1)'
 };
 
+// ¿Cargó el CDN de Chart.js? Si no, las gráficas se omiten en silencio
+// en vez de romper el renderizado del resto de la app.
+const chartJsDisponible = typeof Chart !== 'undefined';
+
 // Configuración común de Chart.js
-Chart.defaults.font.family = "'DM Sans', sans-serif";
-Chart.defaults.color = 'rgba(255, 255, 255, 0.7)';
+if (chartJsDisponible) {
+    Chart.defaults.font.family = "'DM Sans', sans-serif";
+    Chart.defaults.color = 'rgba(255, 255, 255, 0.7)';
+} else {
+    console.warn('[Charts] Chart.js no está disponible; se omiten las gráficas.');
+}
 
 // Función para crear gráfica de distribución por estado (Pie Chart)
 function createStatusChart(libros) {
@@ -260,8 +268,15 @@ function createPagesChart(libros) {
 
 // Función para actualizar todas las gráficas
 function updateCharts(libros) {
-    createStatusChart(libros);
-    createPagesChart(libros);
+    if (!chartJsDisponible) return;
+
+    // Un fallo aquí no debe impedir que se muestren los libros.
+    try {
+        createStatusChart(libros);
+        createPagesChart(libros);
+    } catch (error) {
+        console.error('[Charts] Error al renderizar gráficas:', error);
+    }
 }
 
 // Inicializar gráficas cuando el DOM esté listo

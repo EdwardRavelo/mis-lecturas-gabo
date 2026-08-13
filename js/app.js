@@ -17,27 +17,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     inicializarEventListeners();
 
     if (supabaseConfigurado) {
-        // inicializarAuth: registra onAuthStateChange y obtiene sesión actual
-        const usuario = await inicializarAuth();
+        try {
+            // inicializarAuth: registra onAuthStateChange y obtiene sesión actual.
+            // Lanza si Supabase no responde a tiempo (p.ej. proyecto pausado
+            // en el plan gratuito, que se suspende tras ~7 días de inactividad).
+            const usuario = await inicializarAuth();
 
-        if (usuario) {
-            // Sesión activa desde el inicio (recarga con sesión, o post-OAuth redirect)
-            console.log('[App] Sesión activa al cargar, mostrando app...');
-            ocultarPantallaLogin();
-            actualizarUIUsuario(usuario);
-            await migrarDesdeLocalStorage();
-            await cargarDatos();
-            actualizarInterfaz();
-        } else {
-            // Sin sesión → mostrar login
-            // onAuthStateChange manejará el SIGNED_IN futuro
-            console.log('[App] Sin sesión, mostrando login...');
-            mostrarPantallaLogin();
+            if (usuario) {
+                // Sesión activa desde el inicio (recarga con sesión, o post-OAuth redirect)
+                console.log('[App] Sesión activa al cargar, mostrando app...');
+                ocultarPantallaLogin();
+                actualizarUIUsuario(usuario);
+                await migrarDesdeLocalStorage();
+                await cargarDatos();
+                actualizarInterfaz();
+            } else {
+                // Sin sesión → mostrar login
+                // onAuthStateChange manejará el SIGNED_IN futuro
+                console.log('[App] Sin sesión, mostrando login...');
+                mostrarPantallaLogin();
+            }
+        } catch (error) {
+            // La nube no responde: en vez de dejar al usuario atrapado en la
+            // pantalla de login, entramos con la última copia local.
+            console.error('[App] Supabase no respondió:', error.message);
+            await entrarModoOffline(
+                'No se pudo conectar con la nube. Estás viendo tu última copia local; los cambios se guardan en este navegador.'
+            );
         }
     } else {
-        // Modo offline: usar localStorage directamente
-        await cargarDatos();
-        actualizarInterfaz();
+        // Sin Supabase configurado o CDN caído: localStorage directamente
+        await entrarModoOffline('Modo local: los cambios se guardan solo en este navegador.');
     }
 
     // Actualizar días para libros "Leyendo" cada minuto
@@ -56,6 +66,9 @@ async function cargarDatos() {
         if (lecturasDB !== null) {
             libros = fusionarConCatalogo(lecturasDB);
             limpiarYValidarLibros();
+            // Espejo local: si mañana la nube no responde, la app sigue
+            // teniendo con qué arrancar.
+            escribirCacheLocal();
             return;
         }
         // Si falla la DB, caer a localStorage como fallback
@@ -92,20 +105,31 @@ function limpiarYValidarLibros() {
     });
 }
 
-async function guardarDatos() {
-    // --- Modo Supabase ---
-    if (supabaseConfigurado && usuarioActual) {
-        const ok = await guardarTodasLecturasDB(libros);
-        if (ok) return;
-        console.warn('Fallo al guardar en DB, usando localStorage como fallback');
-    }
-
-    // --- Modo localStorage ---
+// Escribe siempre la copia local, esté o no disponible la nube.
+// Es lo que convierte a localStorage en una caché real y no en un simple
+// fallback: aunque el usuario esté logueado, nunca se queda sin datos.
+function escribirCacheLocal() {
     try {
         localStorage.setItem('gaboLecturas', JSON.stringify(libros));
         localStorage.setItem('lastUpdated', new Date().toISOString());
+        return true;
     } catch (error) {
-        console.error('Error al guardar datos:', error);
+        console.error('Error al guardar datos locales:', error);
+        return false;
+    }
+}
+
+async function guardarDatos() {
+    // Primero lo local (siempre funciona), después la nube.
+    const okLocal = escribirCacheLocal();
+
+    if (supabaseConfigurado && usuarioActual) {
+        const okNube = await guardarTodasLecturasDB(libros);
+        if (!okNube) console.warn('Fallo al guardar en DB; los datos quedan en localStorage');
+        return;
+    }
+
+    if (!okLocal) {
         alert('Error al guardar los datos. Es posible que el almacenamiento esté lleno.');
     }
 }
@@ -113,19 +137,12 @@ async function guardarDatos() {
 async function guardarLectura(index) {
     const libro = libros[index];
 
-    // --- Modo Supabase (guardar solo la lectura modificada) ---
+    escribirCacheLocal();
+
+    // --- Nube (guardar solo la lectura modificada) ---
     if (supabaseConfigurado && usuarioActual) {
         const ok = await guardarLecturaDB(index, libro);
-        if (ok) return;
-        console.warn('Fallo al guardar lectura en DB, usando localStorage como fallback');
-    }
-
-    // --- Modo localStorage ---
-    try {
-        localStorage.setItem('gaboLecturas', JSON.stringify(libros));
-        localStorage.setItem('lastUpdated', new Date().toISOString());
-    } catch (error) {
-        console.error('Error al guardar datos:', error);
+        if (!ok) console.warn('Fallo al guardar lectura en DB; queda en localStorage');
     }
 }
 
@@ -135,6 +152,75 @@ function resetearDatos() {
         localStorage.removeItem('lastUpdated');
         location.reload();
     }
+}
+
+// ========================================
+// Respaldo manual: exportar / importar JSON
+// La red de seguridad definitiva — no depende ni de la nube ni del navegador.
+// ========================================
+function exportarDatos() {
+    const respaldo = {
+        version: 1,
+        exportado: new Date().toISOString(),
+        libros: libros.map((libro, index) => ({
+            libro_id: index,
+            titulo: libro.titulo,
+            estado: libro.estado,
+            inicio: libro.inicio ?? null,
+            final: libro.final ?? null,
+            dias: libro.dias ?? null,
+            comentarios: libro.comentarios ?? null
+        }))
+    };
+
+    const blob = new Blob([JSON.stringify(respaldo, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const fecha = new Date().toISOString().slice(0, 10);
+
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = `mis-lecturas-${fecha}.json`;
+    enlace.click();
+
+    URL.revokeObjectURL(url);
+}
+
+async function importarDatos(archivo) {
+    if (!archivo) return;
+
+    let respaldo;
+    try {
+        respaldo = JSON.parse(await archivo.text());
+    } catch (error) {
+        alert('El archivo no es un JSON válido.');
+        return;
+    }
+
+    const entradas = Array.isArray(respaldo) ? respaldo : respaldo.libros;
+    if (!Array.isArray(entradas)) {
+        alert('El archivo no tiene el formato esperado (falta la lista "libros").');
+        return;
+    }
+
+    if (!confirm(`Se importarán ${entradas.length} lecturas y se sobrescribirá tu progreso actual. ¿Continuar?`)) {
+        return;
+    }
+
+    // El catálogo local manda para los metadatos; del respaldo solo tomamos progreso.
+    entradas.forEach(entrada => {
+        const index = entrada.libro_id;
+        if (!Number.isInteger(index) || !libros[index]) return;
+
+        libros[index].estado = entrada.estado ?? 'Pendiente';
+        libros[index].inicio = entrada.inicio ?? null;
+        libros[index].final = entrada.final ?? null;
+        libros[index].comentarios = entrada.comentarios ?? null;
+    });
+
+    limpiarYValidarLibros();
+    await guardarDatos();
+    actualizarInterfaz();
+    alert('Datos importados correctamente.');
 }
 
 // ========================================
@@ -722,6 +808,24 @@ function inicializarEventListeners() {
             cerrarModal();
         }
     });
+
+    // Respaldo: exportar / importar
+    const btnExportar = document.getElementById('btn-exportar');
+    const btnImportar = document.getElementById('btn-importar');
+    const inputImportar = document.getElementById('input-importar');
+
+    if (btnExportar) btnExportar.addEventListener('click', exportarDatos);
+    if (btnImportar && inputImportar) {
+        btnImportar.addEventListener('click', () => inputImportar.click());
+        inputImportar.addEventListener('change', async (e) => {
+            await importarDatos(e.target.files[0]);
+            e.target.value = ''; // permitir reimportar el mismo archivo
+        });
+    }
+
+    // Reintentar conexión desde el banner offline
+    const btnReintentar = document.getElementById('btn-reintentar');
+    if (btnReintentar) btnReintentar.addEventListener('click', () => location.reload());
 }
 
 // ========================================
@@ -745,6 +849,8 @@ window.gaboApp = {
     cargarDatos,
     guardarDatos,
     resetearDatos,
+    exportarDatos,
+    importarDatos,
     actualizarInterfaz,
     inicializarEventListeners
 };

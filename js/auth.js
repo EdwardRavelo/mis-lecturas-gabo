@@ -1,14 +1,35 @@
 // ========================================
-// Autenticación con Supabase
+// Autenticación con Supabase (solo Google)
 // Mis Lecturas Gabo
 // ========================================
 
 let usuarioActual = null;
 
+// Modo offline: la app funciona con localStorage, sin nube.
+// Se activa cuando Supabase no está disponible (proyecto pausado, sin red,
+// CDN bloqueado) o cuando el usuario elige entrar sin cuenta.
+let modoOffline = false;
+
+// Timeout para no quedarnos colgados esperando a Supabase.
+const AUTH_TIMEOUT_MS = 8000;
+
+// ----------------------------------------
+// Utilidad: promesa con límite de tiempo
+// ----------------------------------------
+
+function conTimeout(promesa, ms, etiqueta) {
+    return Promise.race([
+        promesa,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Timeout: ${etiqueta}`)), ms)
+        )
+    ]);
+}
+
 // ----------------------------------------
 // Inicialización de Auth
 // Retorna el usuario si hay sesión activa, null si no.
-// También configura el listener para cambios futuros.
+// Lanza si Supabase no responde a tiempo → el llamador entra en modo offline.
 // ----------------------------------------
 
 async function inicializarAuth() {
@@ -25,6 +46,7 @@ async function inicializarAuth() {
             const nuevoUsuario = session?.user ?? null;
             if (nuevoUsuario && nuevoUsuario.id !== usuarioActual?.id) {
                 usuarioActual = nuevoUsuario;
+                modoOffline = false;
                 await onLogin(usuarioActual);
             }
         } else if (event === 'SIGNED_OUT') {
@@ -36,29 +58,25 @@ async function inicializarAuth() {
     });
 
     // Recuperar sesión activa al cargar (source of truth)
-    const { data: { session } } = await supabaseClient.auth.getSession();
+    const { data: { session } } = await conTimeout(
+        supabaseClient.auth.getSession(),
+        AUTH_TIMEOUT_MS,
+        'getSession'
+    );
     usuarioActual = session?.user ?? null;
     return usuarioActual;
 }
 
 // ----------------------------------------
-// Login con OAuth
+// Login con Google
 // ----------------------------------------
 
-async function loginConGitHub() {
-    const { error } = await supabaseClient.auth.signInWithOAuth({
-        provider: 'github',
-        options: {
-            redirectTo: window.location.origin + window.location.pathname
-        }
-    });
-    if (error) {
-        console.error('Error al iniciar sesión con GitHub:', error.message);
-        mostrarErrorAuth('No se pudo conectar con GitHub. Intenta de nuevo.');
-    }
-}
-
 async function loginConGoogle() {
+    if (!supabaseConfigurado) {
+        mostrarErrorAuth('La nube no está disponible. Usa "Entrar sin conexión".');
+        return;
+    }
+
     const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -67,19 +85,51 @@ async function loginConGoogle() {
     });
     if (error) {
         console.error('Error al iniciar sesión con Google:', error.message);
-        mostrarErrorAuth('No se pudo conectar con Google. Intenta de nuevo.');
+        mostrarErrorAuth('No se pudo conectar con Google. Puedes entrar sin conexión.');
     }
 }
 
 async function cerrarSesion() {
-    const { error } = await supabaseClient.auth.signOut();
-    if (error) {
-        console.error('Error al cerrar sesión:', error.message);
+    if (supabaseConfigurado) {
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) console.error('Error al cerrar sesión:', error.message);
     }
     // Forzar logout en UI sin esperar el evento SIGNED_OUT
     // (el evento puede no llegar si el token ya expiró o hay error de red)
     usuarioActual = null;
+    modoOffline = false;
     onLogout();
+}
+
+// ----------------------------------------
+// Modo offline
+// ----------------------------------------
+
+async function entrarModoOffline(motivo) {
+    console.warn('[Auth] Modo offline:', motivo);
+    modoOffline = true;
+    usuarioActual = null;
+
+    ocultarPantallaLogin();
+    actualizarUIUsuario(null);
+    mostrarBannerOffline(motivo);
+
+    await window.gaboApp.cargarDatos();
+    window.gaboApp.actualizarInterfaz();
+}
+
+function mostrarBannerOffline(motivo) {
+    const banner = document.getElementById('offline-banner');
+    const texto = document.getElementById('offline-banner-text');
+    if (!banner) return;
+
+    if (texto) texto.textContent = motivo || 'Sin conexión con la nube.';
+    banner.style.display = 'flex';
+}
+
+function ocultarBannerOffline() {
+    const banner = document.getElementById('offline-banner');
+    if (banner) banner.style.display = 'none';
 }
 
 // ----------------------------------------
@@ -88,7 +138,9 @@ async function cerrarSesion() {
 
 async function onLogin(usuario) {
     console.log('[Auth] Sesión iniciada:', usuario.email || usuario.id);
+    modoOffline = false;
     ocultarPantallaLogin();
+    ocultarBannerOffline();
     actualizarUIUsuario(usuario);
 
     // Migrar datos locales si aplica, luego cargar desde Supabase
@@ -100,6 +152,7 @@ async function onLogin(usuario) {
 function onLogout() {
     console.log('[Auth] Sesión cerrada');
     usuarioActual = null;
+    ocultarBannerOffline();
     mostrarPantallaLogin();
     actualizarUIUsuario(null);
 }
@@ -149,6 +202,13 @@ function actualizarUIUsuario(usuario) {
 
         userName.textContent = nombre;
         if (userMenu) userMenu.style.display = 'flex';
+    } else if (modoOffline) {
+        // En offline mostramos el widget con identidad local, para que el
+        // botón de "cerrar sesión" siga disponible y se pueda volver al login.
+        userAvatar.textContent = '⬤';
+        userName.textContent = 'Local';
+        if (userMenu) userMenu.style.display = 'flex';
+        if (mobileHeaderUser) mobileHeaderUser.textContent = '⬤';
     } else {
         userAvatar.textContent = '?';
         userName.textContent = '';
@@ -162,7 +222,7 @@ function mostrarErrorAuth(mensaje) {
     if (errorEl) {
         errorEl.textContent = mensaje;
         errorEl.style.display = 'block';
-        setTimeout(() => { errorEl.style.display = 'none'; }, 4000);
+        setTimeout(() => { errorEl.style.display = 'none'; }, 6000);
     }
 }
 
@@ -171,11 +231,15 @@ function mostrarErrorAuth(mensaje) {
 // ----------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
-    const btnGitHub = document.getElementById('btn-login-github');
     const btnGoogle = document.getElementById('btn-login-google');
+    const btnOffline = document.getElementById('btn-login-offline');
     const btnLogout = document.getElementById('btn-logout');
 
-    if (btnGitHub) btnGitHub.addEventListener('click', loginConGitHub);
     if (btnGoogle) btnGoogle.addEventListener('click', loginConGoogle);
+    if (btnOffline) {
+        btnOffline.addEventListener('click', () =>
+            entrarModoOffline('Estás trabajando sin conexión. Los cambios se guardan en este navegador.')
+        );
+    }
     if (btnLogout) btnLogout.addEventListener('click', cerrarSesion);
 });
