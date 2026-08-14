@@ -1,116 +1,110 @@
 // ========================================
-// Aplicación Principal - Mis Lecturas Gabo
+// Aplicación Principal - Diario de Lecturas
 // ========================================
 
-// Estado global de la aplicación
+// Estado global
+let temas = [];
 let libros = [];
-let filtroActual = 'Todos';
-let vistaActual = 'grid'; // 'grid' | 'list'
-let libroEditando = null;
+let temaActual = null;        // null = todos los temas · 'sin-tema' = huérfanos
+let filtroActual = 'Todos';   // por estado de lectura
+let vistaActual = 'grid';
+let libroEditando = null;     // id (uuid) del libro abierto en el modal
 let eventListenersInicializados = false;
+
+const CLAVE_CACHE = 'gaboLecturas';
 
 // ========================================
 // Inicialización
 // ========================================
 document.addEventListener('DOMContentLoaded', async () => {
-    // Registrar listeners de UI una sola vez
     inicializarEventListeners();
 
     if (supabaseConfigurado) {
         try {
-            // inicializarAuth: registra onAuthStateChange y obtiene sesión actual.
-            // Lanza si Supabase no responde a tiempo (p.ej. proyecto pausado
-            // en el plan gratuito, que se suspende tras ~7 días de inactividad).
             const usuario = await inicializarAuth();
 
             if (usuario) {
-                // Sesión activa desde el inicio (recarga con sesión, o post-OAuth redirect)
                 console.log('[App] Sesión activa al cargar, mostrando app...');
                 ocultarPantallaLogin();
                 actualizarUIUsuario(usuario);
-                await migrarDesdeLocalStorage();
                 await cargarDatos();
                 actualizarInterfaz();
             } else {
-                // Sin sesión → mostrar login
-                // onAuthStateChange manejará el SIGNED_IN futuro
                 console.log('[App] Sin sesión, mostrando login...');
                 mostrarPantallaLogin();
             }
         } catch (error) {
-            // La nube no responde: en vez de dejar al usuario atrapado en la
-            // pantalla de login, entramos con la última copia local.
+            // La nube no responde (proyecto pausado, sin red): entramos con
+            // la última copia local en vez de dejar al usuario en el login.
             console.error('[App] Supabase no respondió:', error.message);
             await entrarModoOffline(
                 'No se pudo conectar con la nube. Estás viendo tu última copia local; los cambios se guardan en este navegador.'
             );
         }
     } else {
-        // Sin Supabase configurado o CDN caído: localStorage directamente
         await entrarModoOffline('Modo local: los cambios se guardan solo en este navegador.');
     }
 
-    // Actualizar días para libros "Leyendo" cada minuto
     setInterval(actualizarDiasEnProceso, 60000);
 });
 
 // ========================================
-// Gestión de Datos
-// Prioridad: Supabase → localStorage → datos originales
+// Carga y persistencia
+// Prioridad: Supabase → caché local
 // ========================================
 async function cargarDatos() {
-    // --- Modo Supabase ---
     if (supabaseConfigurado && usuarioActual) {
-        const lecturasDB = await cargarLecturasDB();
+        const [temasDB, librosDB] = await Promise.all([cargarTemasDB(), cargarLibrosDB()]);
 
-        if (lecturasDB !== null) {
-            libros = fusionarConCatalogo(lecturasDB);
+        if (temasDB !== null && librosDB !== null) {
+            temas = temasDB;
+            libros = librosDB;
             limpiarYValidarLibros();
-            // Espejo local: si mañana la nube no responde, la app sigue
-            // teniendo con qué arrancar.
             escribirCacheLocal();
             return;
         }
-        // Si falla la DB, caer a localStorage como fallback
-        console.warn('Fallo DB, usando localStorage como fallback');
+        console.warn('Fallo DB, usando caché local');
     }
 
-    // --- Modo localStorage (offline o fallback) ---
-    const datosGuardados = localStorage.getItem('gaboLecturas');
-
-    if (datosGuardados) {
-        try {
-            libros = JSON.parse(datosGuardados);
-        } catch (error) {
-            console.error('Error al parsear datos guardados:', error);
-            libros = JSON.parse(JSON.stringify(librosOriginales));
-        }
-    } else {
-        libros = JSON.parse(JSON.stringify(librosOriginales));
-    }
-
+    leerCacheLocal();
     limpiarYValidarLibros();
 }
 
-function limpiarYValidarLibros() {
-    libros.forEach(libro => {
-        // Limpiar fechas de libros pendientes
-        if (libro.estado === 'Pendiente') {
-            libro.inicio = null;
-            libro.final = null;
-            libro.dias = null;
+function leerCacheLocal() {
+    const guardado = localStorage.getItem(CLAVE_CACHE);
+    if (!guardado) {
+        temas = [];
+        libros = [];
+        return;
+    }
+
+    try {
+        const datos = JSON.parse(guardado);
+
+        // El formato viejo era un array plano de 18 libros del catálogo
+        // estático. Ya no aplica: los datos reales están en la nube.
+        if (Array.isArray(datos)) {
+            console.warn('[App] Caché en formato antiguo, se descarta.');
+            temas = [];
+            libros = [];
+            return;
         }
-        // Recalcular días
-        calcularDias(libro);
-    });
+
+        temas = datos.temas ?? [];
+        libros = datos.libros ?? [];
+    } catch (error) {
+        console.error('Error al leer la caché local:', error);
+        temas = [];
+        libros = [];
+    }
 }
 
-// Escribe siempre la copia local, esté o no disponible la nube.
-// Es lo que convierte a localStorage en una caché real y no en un simple
-// fallback: aunque el usuario esté logueado, nunca se queda sin datos.
+// Escribe siempre la copia local, esté o no disponible la nube. Es lo que
+// convierte a localStorage en caché real y no en un simple fallback:
+// aunque haya sesión activa, nunca te quedas sin datos.
 function escribirCacheLocal() {
     try {
-        localStorage.setItem('gaboLecturas', JSON.stringify(libros));
+        localStorage.setItem(CLAVE_CACHE, JSON.stringify({ temas, libros }));
         localStorage.setItem('lastUpdated', new Date().toISOString());
         return true;
     } catch (error) {
@@ -119,72 +113,68 @@ function escribirCacheLocal() {
     }
 }
 
-async function guardarDatos() {
-    // Primero lo local (siempre funciona), después la nube.
-    const okLocal = escribirCacheLocal();
-
-    if (supabaseConfigurado && usuarioActual) {
-        const okNube = await guardarTodasLecturasDB(libros);
-        if (!okNube) console.warn('Fallo al guardar en DB; los datos quedan en localStorage');
-        return;
-    }
-
-    if (!okLocal) {
-        alert('Error al guardar los datos. Es posible que el almacenamiento esté lleno.');
-    }
+function limpiarYValidarLibros() {
+    libros.forEach(libro => {
+        if (libro.estado === 'Pendiente') {
+            libro.inicio = null;
+            libro.final = null;
+            libro.dias = null;
+        }
+        calcularDias(libro);
+    });
 }
 
-async function guardarLectura(index) {
-    const libro = libros[index];
-
+// Aplica cambios a un libro, los cachea y los sube. `campos` usa nombres
+// de la app (año, fechas en español); db.js traduce en el borde.
+async function persistirLibro(libro, campos) {
+    Object.assign(libro, campos);
+    calcularDias(libro);
     escribirCacheLocal();
 
-    // --- Nube (guardar solo la lectura modificada) ---
-    if (supabaseConfigurado && usuarioActual) {
-        const ok = await guardarLecturaDB(index, libro);
-        if (!ok) console.warn('Fallo al guardar lectura en DB; queda en localStorage');
+    if (supabaseConfigurado && usuarioActual && libro.id) {
+        const ok = await actualizarLibroDB(libro.id, { ...campos, dias: libro.dias });
+        if (!ok) console.warn('Fallo al guardar en la nube; queda en la caché local');
     }
 }
 
-function resetearDatos() {
-    if (confirm('¿Estás seguro de que quieres resetear todos los datos a los valores originales?')) {
-        localStorage.removeItem('gaboLecturas');
-        localStorage.removeItem('lastUpdated');
-        location.reload();
-    }
+function puedeEditarCatalogo() {
+    return supabaseConfigurado && usuarioActual;
 }
 
 // ========================================
-// Respaldo manual: exportar / importar JSON
-// La red de seguridad definitiva — no depende ni de la nube ni del navegador.
+// Respaldo: exportar / importar JSON
 // ========================================
 function exportarDatos() {
     const respaldo = {
-        version: 1,
+        version: 2,
         exportado: new Date().toISOString(),
-        libros: libros.map((libro, index) => ({
-            libro_id: index,
-            titulo: libro.titulo,
-            estado: libro.estado,
-            inicio: libro.inicio ?? null,
-            final: libro.final ?? null,
-            dias: libro.dias ?? null,
-            comentarios: libro.comentarios ?? null
+        temas: temas.map(t => ({ nombre: t.nombre, color: t.color, orden: t.orden })),
+        libros: libros.map(l => ({
+            tema: temas.find(t => t.id === l.tema_id)?.nombre ?? null,
+            titulo: l.titulo,
+            autor: l.autor,
+            año: l.año,
+            paginas: l.paginas,
+            resumen: l.resumen,
+            estado: l.estado,
+            inicio: l.inicio,
+            final: l.final,
+            dias: l.dias,
+            comentarios: l.comentarios
         }))
     };
 
     const blob = new Blob([JSON.stringify(respaldo, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const fecha = new Date().toISOString().slice(0, 10);
-
     const enlace = document.createElement('a');
     enlace.href = url;
-    enlace.download = `mis-lecturas-${fecha}.json`;
+    enlace.download = `mis-lecturas-${new Date().toISOString().slice(0, 10)}.json`;
     enlace.click();
-
     URL.revokeObjectURL(url);
 }
 
+// Restaura progreso sobre los libros que ya existen, emparejando por título.
+// Crear libros nuevos es tarea del importador CSV, no de esta función.
 async function importarDatos(archivo) {
     if (!archivo) return;
 
@@ -202,29 +192,43 @@ async function importarDatos(archivo) {
         return;
     }
 
-    if (!confirm(`Se importarán ${entradas.length} lecturas y se sobrescribirá tu progreso actual. ¿Continuar?`)) {
+    if (!confirm(`Se restaurará el progreso de ${entradas.length} lecturas sobre tus libros actuales. ¿Continuar?`)) {
         return;
     }
 
-    // El catálogo local manda para los metadatos; del respaldo solo tomamos progreso.
-    entradas.forEach(entrada => {
-        const index = entrada.libro_id;
-        if (!Number.isInteger(index) || !libros[index]) return;
+    const normalizar = t => String(t ?? '').trim().toLowerCase();
+    let aplicados = 0;
+    const sinPareja = [];
 
-        libros[index].estado = entrada.estado ?? 'Pendiente';
-        libros[index].inicio = entrada.inicio ?? null;
-        libros[index].final = entrada.final ?? null;
-        libros[index].comentarios = entrada.comentarios ?? null;
-    });
+    for (const entrada of entradas) {
+        const libro = libros.find(l => normalizar(l.titulo) === normalizar(entrada.titulo));
+        if (!libro) {
+            sinPareja.push(entrada.titulo);
+            continue;
+        }
 
-    limpiarYValidarLibros();
-    await guardarDatos();
+        await persistirLibro(libro, {
+            estado: entrada.estado ?? 'Pendiente',
+            inicio: entrada.inicio ?? null,
+            final: entrada.final ?? null,
+            comentarios: entrada.comentarios ?? null
+        });
+        aplicados++;
+    }
+
     actualizarInterfaz();
-    alert('Datos importados correctamente.');
+
+    let mensaje = `Restauradas ${aplicados} lecturas.`;
+    if (sinPareja.length) {
+        mensaje += `\n\nNo se encontraron estos ${sinPareja.length} libros en tu biblioteca:\n· ` +
+                   sinPareja.slice(0, 10).join('\n· ');
+        if (sinPareja.length > 10) mensaje += `\n… y ${sinPareja.length - 10} más.`;
+    }
+    alert(mensaje);
 }
 
 // ========================================
-// Cálculo Automático de Días
+// Cálculo de días
 // ========================================
 function calcularDias(libro) {
     if (!libro.inicio) {
@@ -239,7 +243,6 @@ function calcularDias(libro) {
     }
 
     let fechaFinal;
-
     if (libro.estado === 'Leyendo') {
         fechaFinal = new Date();
     } else if (libro.estado === 'Leído' && libro.final) {
@@ -254,8 +257,7 @@ function calcularDias(libro) {
         return;
     }
 
-    const diferenciaMilisegundos = fechaFinal - fechaInicio;
-    const dias = Math.floor(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
+    const dias = Math.floor((fechaFinal - fechaInicio) / (1000 * 60 * 60 * 24));
     libro.dias = dias >= 0 ? dias : null;
 }
 
@@ -264,9 +266,9 @@ function actualizarDiasEnProceso() {
 
     libros.forEach(libro => {
         if (libro.estado === 'Leyendo' && libro.inicio) {
-            const diasAntes = libro.dias;
+            const antes = libro.dias;
             calcularDias(libro);
-            if (libro.dias !== diasAntes) actualizado = true;
+            if (libro.dias !== antes) actualizado = true;
         }
     });
 
@@ -277,23 +279,19 @@ function actualizarDiasEnProceso() {
 }
 
 // ========================================
-// Google Books API - Obtener Portadas
+// Portadas (Google Books)
 // ========================================
-async function obtenerPortada(titulo, autor = 'Gabriel García Márquez') {
+async function obtenerPortada(titulo, autor) {
     try {
-        const query = encodeURIComponent(`intitle:${titulo} inauthor:${autor}`);
-        const url = `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=1`;
+        const partes = [`intitle:${titulo}`];
+        if (autor) partes.push(`inauthor:${autor}`);
+        const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(partes.join(' '))}&maxResults=1`;
 
-        const response = await fetch(url);
-        const data = await response.json();
+        const respuesta = await fetch(url);
+        const datos = await respuesta.json();
 
-        if (data.items && data.items.length > 0) {
-            const imageLinks = data.items[0].volumeInfo.imageLinks;
-            if (imageLinks) {
-                return imageLinks.thumbnail || imageLinks.smallThumbnail || null;
-            }
-        }
-        return null;
+        const imagenes = datos.items?.[0]?.volumeInfo?.imageLinks;
+        return imagenes ? (imagenes.thumbnail || imagenes.smallThumbnail || null) : null;
     } catch (error) {
         console.error(`Error al obtener portada para "${titulo}":`, error);
         return null;
@@ -301,89 +299,178 @@ async function obtenerPortada(titulo, autor = 'Gabriel García Márquez') {
 }
 
 async function cargarTodasLasPortadas() {
-    const promesas = libros.map(async (libro, index) => {
-        if (!libro.portada) {
-            const portada = await obtenerPortada(libro.titulo);
-            if (portada) {
-                libros[index].portada = portada;
+    const pendientes = libros.filter(l => !l.portada);
+    if (!pendientes.length) return;
+
+    await Promise.all(pendientes.map(async libro => {
+        const portada = await obtenerPortada(libro.titulo, libro.autor);
+        if (portada) {
+            libro.portada = portada;
+            if (puedeEditarCatalogo() && libro.id) {
+                await actualizarLibroDB(libro.id, { portada });
             }
         }
-    });
+    }));
 
-    await Promise.all(promesas);
-    await guardarDatos();
+    escribirCacheLocal();
     renderizarLibros();
 }
 
 // ========================================
-// Renderizado de Interfaz
+// Selección por tema
+// ========================================
+function librosDelTema() {
+    if (temaActual === null) return libros;
+    if (temaActual === 'sin-tema') return libros.filter(l => !l.tema_id);
+    return libros.filter(l => l.tema_id === temaActual);
+}
+
+function nombreTemaActual() {
+    if (temaActual === null) return 'Todas mis lecturas';
+    if (temaActual === 'sin-tema') return 'Sin tema';
+    return temas.find(t => t.id === temaActual)?.nombre ?? 'Tema';
+}
+
+function seleccionarTema(id) {
+    temaActual = id;
+    aplicarColorTema();
+    renderizarTemas();
+    actualizarInterfaz();
+    if (window.innerWidth <= 768) cerrarSidebarMobile();
+}
+
+// Cada tema puede llevar su propio acento; se inyecta como variable CSS
+// para que toda la interfaz (incluidas las gráficas) lo herede.
+function aplicarColorTema() {
+    const tema = temas.find(t => t.id === temaActual);
+    const color = tema?.color || null;
+    if (color) {
+        document.documentElement.style.setProperty('--tema-acento', color);
+    } else {
+        document.documentElement.style.removeProperty('--tema-acento');
+    }
+}
+
+// ========================================
+// Renderizado
 // ========================================
 function actualizarInterfaz() {
+    renderizarTemas();
     renderizarLibros();
     actualizarEstadisticas();
     renderizarTimeline();
-    initCharts(libros);
-
-    // Cargar portadas de forma asíncrona
+    initCharts(librosDelTema());
+    actualizarTituloSeccion();
     cargarTodasLasPortadas();
+}
+
+function actualizarTituloSeccion() {
+    const titulo = document.getElementById('section-title');
+    if (titulo) {
+        titulo.textContent = nombreTemaActual();
+        titulo.dataset.text = nombreTemaActual();
+    }
+}
+
+function renderizarTemas() {
+    const lista = document.getElementById('temas-list');
+    if (!lista) return;
+
+    lista.innerHTML = '';
+
+    const entradas = [
+        { id: null, nombre: 'Todas mis lecturas', color: null, total: libros.length }
+    ];
+
+    temas.forEach(t => entradas.push({
+        id: t.id,
+        nombre: t.nombre,
+        color: t.color,
+        total: libros.filter(l => l.tema_id === t.id).length
+    }));
+
+    const huerfanos = libros.filter(l => !l.tema_id).length;
+    if (huerfanos > 0) {
+        entradas.push({ id: 'sin-tema', nombre: 'Sin tema', color: null, total: huerfanos });
+    }
+
+    entradas.forEach(entrada => {
+        const boton = document.createElement('button');
+        boton.className = 'tema-btn' + (entrada.id === temaActual ? ' active' : '');
+        boton.innerHTML = `
+            <span class="tema-punto" style="background:${entrada.color || 'var(--text-muted)'}"></span>
+            <span class="tema-nombre">${escaparHtml(entrada.nombre)}</span>
+            <span class="tema-count">${entrada.total}</span>
+        `;
+        boton.addEventListener('click', () => seleccionarTema(entrada.id));
+
+        // Editar tema: solo para temas reales, no para los agregados
+        if (entrada.id && entrada.id !== 'sin-tema') {
+            const editar = document.createElement('span');
+            editar.className = 'tema-editar';
+            editar.textContent = '✎';
+            editar.title = 'Editar tema';
+            editar.addEventListener('click', e => {
+                e.stopPropagation();
+                abrirModalTema(entrada.id);
+            });
+            boton.appendChild(editar);
+        }
+
+        lista.appendChild(boton);
+    });
 }
 
 function renderizarLibros() {
     const grid = document.getElementById('books-grid');
     if (!grid) return;
 
-    let librosFiltrados = libros;
+    let visibles = librosDelTema();
 
     if (filtroActual !== 'Todos') {
-        librosFiltrados = libros.filter(libro => libro.estado === filtroActual);
+        visibles = visibles.filter(libro => libro.estado === filtroActual);
     }
 
-    const searchInput = document.getElementById('search-input');
-    if (searchInput && searchInput.value.trim()) {
-        const busqueda = searchInput.value.toLowerCase();
-        librosFiltrados = librosFiltrados.filter(libro =>
-            libro.titulo.toLowerCase().includes(busqueda)
+    const busqueda = document.getElementById('search-input')?.value.trim().toLowerCase();
+    if (busqueda) {
+        visibles = visibles.filter(libro =>
+            libro.titulo.toLowerCase().includes(busqueda) ||
+            (libro.autor || '').toLowerCase().includes(busqueda)
         );
     }
 
     grid.innerHTML = '';
 
-    librosFiltrados.forEach((libro) => {
-        const realIndex = libros.indexOf(libro);
-        const card = crearCardLibro(libro, realIndex);
-        grid.appendChild(card);
-    });
-
-    if (librosFiltrados.length === 0) {
-        grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; padding: 3rem; color: #666;">No se encontraron libros con ese criterio.</p>';
+    if (visibles.length === 0) {
+        grid.innerHTML = `<p class="grid-vacio">${
+            libros.length === 0
+                ? 'Todavía no hay libros. Crea un tema y añade el primero.'
+                : 'No se encontraron libros con ese criterio.'
+        }</p>`;
+        return;
     }
+
+    visibles.forEach(libro => grid.appendChild(crearCardLibro(libro)));
 }
 
-function crearCardLibro(libro, index) {
+function crearCardLibro(libro) {
     const card = document.createElement('div');
     card.className = 'book-card';
-    card.dataset.index = index;
+    card.dataset.id = libro.id;
 
     calcularDias(libro);
 
-    const estadoClass = libro.estado === 'Leído' ? 'status-leido' :
-                        libro.estado === 'Leyendo' ? 'status-leyendo' :
-                        'status-pendiente';
+    const claseEstado = libro.estado === 'Leído' ? 'leido'
+                      : libro.estado === 'Leyendo' ? 'leyendo'
+                      : 'pendiente';
+    card.classList.add('estado-' + claseEstado);
 
-    const estadoCardClass = libro.estado === 'Leído' ? 'estado-leido' :
-                             libro.estado === 'Leyendo' ? 'estado-leyendo' :
-                             'estado-pendiente';
-    card.classList.add(estadoCardClass);
-
-    // Calcular progreso basado en promedio real de días leídos
     let progreso = 0;
     if (libro.estado === 'Leído') {
         progreso = 100;
     } else if (libro.estado === 'Leyendo' && libro.inicio) {
-        const diasTranscurridos = libro.dias || 0;
-        const promedioReal = calcularPromedioDias();
-        const diasEstimados = promedioReal > 0 ? promedioReal : 30;
-        progreso = Math.min((diasTranscurridos / diasEstimados) * 100, 95);
+        const promedio = calcularPromedioDias();
+        progreso = Math.min(((libro.dias || 0) / (promedio > 0 ? promedio : 30)) * 100, 95);
     }
 
     card.innerHTML = `
@@ -394,34 +481,30 @@ function crearCardLibro(libro, index) {
         </div>
         <div class="book-cover-wrapper">
             ${libro.portada
-                ? `<img src="${libro.portada}" alt="${libro.titulo}" class="book-cover">`
+                ? `<img src="${libro.portada}" alt="${escaparHtml(libro.titulo)}" class="book-cover">`
                 : '<div class="book-cover-placeholder">📚</div>'}
         </div>
         <div class="book-info">
-            <div class="book-year">${libro.año}</div>
-            <span class="book-status ${estadoClass}">${libro.estado}</span>
-            <h3 class="book-title">${libro.titulo}</h3>
-            <p class="book-pages">${libro.paginas} pág</p>
+            <div class="book-year">${libro.año ?? ''}</div>
+            <span class="book-status status-${claseEstado}">${libro.estado}</span>
+            <h3 class="book-title">${escaparHtml(libro.titulo)}</h3>
+            <p class="book-pages">${libro.paginas ? libro.paginas + ' pág' : ''}</p>
             ${progreso > 0 ? `
                 <div class="book-progress">
                     <div class="book-progress-bar" style="width: ${progreso}%"></div>
-                </div>
-            ` : ''}
+                </div>` : ''}
         </div>
     `;
 
-    // Click en cualquier parte de la card abre el modal
-    card.addEventListener('click', (e) => {
-        // Ignorar si el click fue en un botón de acción rápida
+    card.addEventListener('click', e => {
         if (e.target.closest('.quick-action-btn')) return;
-        abrirModalEdicion(card.dataset.index);
+        abrirModalEdicion(libro.id);
     });
 
-    const actionButtons = card.querySelectorAll('.quick-action-btn');
-    actionButtons.forEach(btn => {
-        btn.addEventListener('click', (e) => {
+    card.querySelectorAll('.quick-action-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
             e.stopPropagation();
-            cambiarEstadoRapido(card.dataset.index, btn.dataset.action);
+            cambiarEstadoRapido(libro.id, btn.dataset.action);
         });
     });
 
@@ -429,179 +512,189 @@ function crearCardLibro(libro, index) {
 }
 
 function actualizarEstadisticas() {
-    const leidos = libros.filter(l => l.estado === 'Leído').length;
-    const leyendo = libros.filter(l => l.estado === 'Leyendo').length;
-    const pendientes = libros.filter(l => l.estado === 'Pendiente').length;
+    const ambito = librosDelTema();
 
-    const paginasLeidas = libros
-        .filter(l => l.estado === 'Leído')
-        .reduce((total, libro) => total + libro.paginas, 0);
+    const leidos = ambito.filter(l => l.estado === 'Leído');
+    const paginas = leidos.reduce((total, l) => total + (l.paginas || 0), 0);
 
-    const promedioDias = calcularPromedioDias();
+    const asignar = (id, valor) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = valor;
+    };
 
-    document.getElementById('total-leidos').textContent = leidos;
-    document.getElementById('total-leyendo').textContent = leyendo;
-    document.getElementById('total-pendientes').textContent = pendientes;
-    document.getElementById('total-paginas').textContent = paginasLeidas.toLocaleString();
-    document.getElementById('promedio-dias').textContent = promedioDias;
+    asignar('total-leidos', leidos.length);
+    asignar('total-leyendo', ambito.filter(l => l.estado === 'Leyendo').length);
+    asignar('total-pendientes', ambito.filter(l => l.estado === 'Pendiente').length);
+    asignar('total-paginas', paginas.toLocaleString());
+    asignar('promedio-dias', calcularPromedioDias());
 }
 
 function calcularPromedioDias() {
-    const librosConDias = libros.filter(l => l.estado === 'Leído' && l.dias !== null);
-    if (librosConDias.length === 0) return 0;
-    return Math.round(
-        librosConDias.reduce((sum, l) => sum + l.dias, 0) / librosConDias.length
-    );
+    const conDias = librosDelTema().filter(l => l.estado === 'Leído' && l.dias !== null);
+    if (!conDias.length) return 0;
+    return Math.round(conDias.reduce((suma, l) => suma + l.dias, 0) / conDias.length);
 }
 
+// Cronología de LECTURA, no de publicación: es lo que convierte la app en
+// un diario. Los pendientes sin fecha no aparecen porque no son un hito.
 function renderizarTimeline() {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
 
     timeline.innerHTML = '<div class="timeline-line"></div>';
 
-    libros.forEach((libro, index) => {
+    const conFecha = librosDelTema()
+        .filter(l => l.inicio || l.final)
+        .map(l => ({ libro: l, fecha: parseFechaEspañol(l.final || l.inicio) }))
+        .filter(x => x.fecha)
+        .sort((a, b) => b.fecha - a.fecha);
+
+    if (!conFecha.length) {
+        timeline.innerHTML += '<p class="grid-vacio">Aún no hay lecturas con fecha.</p>';
+        return;
+    }
+
+    conFecha.forEach(({ libro, fecha }) => {
+        const clase = libro.estado === 'Leído' ? 'leido'
+                    : libro.estado === 'Leyendo' ? 'leyendo'
+                    : 'pendiente';
+
         const item = document.createElement('div');
-
-        const estadoClass = libro.estado === 'Leído' ? 'leido' :
-                            libro.estado === 'Leyendo' ? 'leyendo' : 'pendiente';
-
-        // clase en el item para controlar colores de año y título via CSS
-        item.className = `timeline-item ${estadoClass}`;
-
-        const statusLabel = libro.estado === 'Leído' ? 'leido' :
-                            libro.estado === 'Leyendo' ? 'leyendo' : 'pendiente';
-
+        item.className = `timeline-item ${clase}`;
         item.innerHTML = `
-            <div class="timeline-dot ${estadoClass === 'pendiente' ? '' : estadoClass}"></div>
-            <div class="timeline-year">${libro.año}</div>
-            <div class="timeline-title">${libro.titulo}</div>
-            <span class="timeline-status ${statusLabel}">${libro.estado}</span>
+            <div class="timeline-dot ${clase}"></div>
+            <div class="timeline-year">${formatearFechaEspañol(fecha)}</div>
+            <div class="timeline-title">${escaparHtml(libro.titulo)}</div>
+            <span class="timeline-status ${clase}">${libro.estado}</span>
         `;
-
-        item.addEventListener('click', () => abrirModalEdicion(index));
+        item.addEventListener('click', () => abrirModalEdicion(libro.id));
         timeline.appendChild(item);
     });
 }
 
-// ========================================
-// Modal de Edición
-// ========================================
-function abrirModalEdicion(index) {
-    libroEditando = parseInt(index);
-    const libro = libros[libroEditando];
+function escaparHtml(texto) {
+    const div = document.createElement('div');
+    div.textContent = texto ?? '';
+    return div.innerHTML;
+}
 
-    const heroImage = document.getElementById('modal-hero-image');
+// ========================================
+// Modal de lectura
+// ========================================
+function buscarLibro(id) {
+    return libros.find(l => l.id === id) || null;
+}
+
+function abrirModalEdicion(id) {
+    const libro = buscarLibro(id);
+    if (!libro) return;
+
+    libroEditando = id;
+
+    const hero = document.getElementById('modal-hero-image');
     if (libro.portada) {
-        heroImage.style.backgroundImage = `url(${libro.portada})`;
+        hero.style.backgroundImage = `url(${libro.portada})`;
     } else {
-        heroImage.style.background = 'linear-gradient(135deg, rgba(0, 217, 163, 0.2), rgba(255, 107, 157, 0.2))';
+        hero.style.background = 'linear-gradient(135deg, rgba(0, 217, 163, 0.2), rgba(255, 107, 157, 0.2))';
     }
 
-    document.getElementById('modal-year').textContent = libro.año;
-    document.getElementById('modal-title').textContent = libro.titulo;
-    document.getElementById('modal-pages').textContent = `${libro.paginas} páginas`;
+    const poner = (id, valor) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = valor;
+    };
 
-    const estadoBadge = document.getElementById('modal-estado-badge');
-    estadoBadge.textContent = libro.estado;
-    estadoBadge.className = '';
-    estadoBadge.classList.add(
-        libro.estado === 'Leído' ? 'status-leido' :
-        libro.estado === 'Leyendo' ? 'status-leyendo' :
-        'status-pendiente'
-    );
+    poner('modal-year', libro.año ?? '');
+    poner('modal-title', libro.titulo);
+    poner('modal-pages', libro.paginas ? `${libro.paginas} páginas` : '');
+    poner('modal-description', libro.resumen || 'Sin descripción disponible.');
+    poner('modal-fecha-inicio', libro.inicio || '--');
+    poner('modal-fecha-final', libro.final || '--');
+    poner('modal-dias', libro.dias !== null ? `${libro.dias} días` : '--');
 
-    document.getElementById('modal-description').textContent = libro.resumen || 'Sin descripción disponible.';
-    document.getElementById('modal-fecha-inicio').textContent = libro.inicio || '--';
-    document.getElementById('modal-fecha-final').textContent = libro.final || '--';
-    document.getElementById('modal-dias').textContent = libro.dias !== null ? `${libro.dias} días` : '--';
+    const badge = document.getElementById('modal-estado-badge');
+    badge.textContent = libro.estado;
+    badge.className = libro.estado === 'Leído' ? 'status-leido'
+                    : libro.estado === 'Leyendo' ? 'status-leyendo'
+                    : 'status-pendiente';
 
     let progreso = 0;
     if (libro.estado === 'Leído') {
         progreso = 100;
     } else if (libro.estado === 'Leyendo' && libro.inicio) {
-        const diasTranscurridos = libro.dias || 0;
-        const promedioReal = calcularPromedioDias();
-        const diasEstimados = promedioReal > 0 ? promedioReal : 30;
-        progreso = Math.min((diasTranscurridos / diasEstimados) * 100, 95);
+        const promedio = calcularPromedioDias();
+        progreso = Math.min(((libro.dias || 0) / (promedio > 0 ? promedio : 30)) * 100, 95);
     }
-
     document.getElementById('modal-progress-fill').style.width = progreso + '%';
     document.getElementById('modal-progress-text').textContent = Math.round(progreso) + '%';
 
-    document.getElementById('edit-index').value = index;
     document.getElementById('edit-inicio').value = libro.inicio || '';
     document.getElementById('edit-final').value = libro.final || '';
 
-    // Cargar comentarios del libro
-    const comentariosEl = document.getElementById('edit-comentarios');
-    const savedEl = document.getElementById('comentarios-saved');
-    if (comentariosEl) {
-        comentariosEl.value = libro.comentarios || '';
-        if (savedEl) savedEl.classList.remove('visible');
+    const comentarios = document.getElementById('edit-comentarios');
+    const avisoGuardado = document.getElementById('comentarios-saved');
+    if (comentarios) {
+        comentarios.value = libro.comentarios || '';
+        avisoGuardado?.classList.remove('visible');
     }
 
-    // Listener del botón guardar comentarios (reemplazar cada vez para evitar duplicados)
-    const btnGuardar = document.getElementById('btn-guardar-comentarios');
-    if (btnGuardar) {
-        btnGuardar.onclick = async () => {
-            libros[libroEditando].comentarios = comentariosEl.value || null;
-            await guardarLectura(libroEditando);
-            if (savedEl) {
-                savedEl.classList.add('visible');
-                setTimeout(() => savedEl.classList.remove('visible'), 2000);
+    const btnComentarios = document.getElementById('btn-guardar-comentarios');
+    if (btnComentarios) {
+        btnComentarios.onclick = async () => {
+            await persistirLibro(libro, { comentarios: comentarios.value || null });
+            if (avisoGuardado) {
+                avisoGuardado.classList.add('visible');
+                setTimeout(() => avisoGuardado.classList.remove('visible'), 2000);
             }
         };
     }
 
-    const actionButtons = document.querySelectorAll('.modal-action-btn');
-    actionButtons.forEach(btn => {
-        btn.onclick = (e) => {
+    document.querySelectorAll('.modal-action-btn').forEach(btn => {
+        btn.onclick = e => {
             e.preventDefault();
-            cambiarEstadoRapido(index, btn.dataset.action);
+            cambiarEstadoRapido(id, btn.dataset.action);
             cerrarModal();
         };
     });
 
-    const modal = document.getElementById('edit-modal');
-    modal.classList.add('active');
+    const btnEditarLibro = document.getElementById('btn-editar-libro');
+    if (btnEditarLibro) {
+        btnEditarLibro.style.display = puedeEditarCatalogo() ? '' : 'none';
+        btnEditarLibro.onclick = () => {
+            cerrarModal();
+            abrirModalLibro(id);
+        };
+    }
+
+    document.getElementById('edit-modal').classList.add('active');
     document.body.style.overflow = 'hidden';
 }
 
 function cerrarModal() {
-    const modal = document.getElementById('edit-modal');
-    modal.classList.remove('active');
+    document.getElementById('edit-modal').classList.remove('active');
     document.body.style.overflow = '';
     libroEditando = null;
 }
 
 function actualizarDiasModal() {
-    const inicio = document.getElementById('edit-inicio').value;
-    const final = document.getElementById('edit-final').value;
-    const estadoSeleccionado = document.querySelector('input[name="estado"]:checked')?.value;
-
-    const libroTemp = {
-        inicio: inicio || null,
-        final: final || null,
-        estado: estadoSeleccionado || 'Pendiente'
+    const temporal = {
+        inicio: document.getElementById('edit-inicio').value || null,
+        final: document.getElementById('edit-final').value || null,
+        estado: buscarLibro(libroEditando)?.estado || 'Pendiente'
     };
+    calcularDias(temporal);
 
-    calcularDias(libroTemp);
-
-    const displayDias = document.getElementById('edit-dias');
-    if (libroTemp.dias !== null) {
-        displayDias.textContent = libroTemp.estado === 'Leyendo'
-            ? `${libroTemp.dias} días (en proceso)`
-            : `${libroTemp.dias} días`;
-    } else {
-        displayDias.textContent = '-';
-    }
+    const display = document.getElementById('edit-dias');
+    if (!display) return;
+    display.textContent = temporal.dias !== null
+        ? (temporal.estado === 'Leyendo' ? `${temporal.dias} días (en proceso)` : `${temporal.dias} días`)
+        : '-';
 }
 
 async function guardarEdicion(event) {
     event.preventDefault();
 
-    if (libroEditando === null) return;
+    const libro = buscarLibro(libroEditando);
+    if (!libro) return;
 
     const inicio = document.getElementById('edit-inicio').value || null;
     const final = document.getElementById('edit-final').value || null;
@@ -610,157 +703,320 @@ async function guardarEdicion(event) {
         alert('Formato de fecha de inicio inválido. Usa: DD/mes/YYYY (ej: 01/enero/2026)');
         return;
     }
-
     if (final && !parseFechaEspañol(final)) {
         alert('Formato de fecha final inválido. Usa: DD/mes/YYYY (ej: 15/febrero/2026)');
         return;
     }
 
-    libros[libroEditando].inicio = inicio;
-    libros[libroEditando].final = final;
-    calcularDias(libros[libroEditando]);
-
-    await guardarLectura(libroEditando);
+    await persistirLibro(libro, { inicio, final });
     actualizarInterfaz();
     cerrarModal();
 }
 
 // ========================================
-// Cambio Rápido de Estado
+// Cambio rápido de estado
 // ========================================
-async function cambiarEstadoRapido(index, nuevoEstado) {
-    if (!libros[index]) return;
-
-    const libro = libros[index];
-    libro.estado = nuevoEstado;
+async function cambiarEstadoRapido(id, nuevoEstado) {
+    const libro = buscarLibro(id);
+    if (!libro) return;
 
     const hoy = formatearFechaEspañol(new Date());
+    const campos = { estado: nuevoEstado };
 
-    if (nuevoEstado === 'Leyendo' && !libro.inicio) {
-        libro.inicio = hoy;
-        libro.final = null;
+    if (nuevoEstado === 'Leyendo') {
+        campos.inicio = libro.inicio || hoy;
+        campos.final = null;
     } else if (nuevoEstado === 'Leído') {
-        if (!libro.inicio) libro.inicio = hoy;
-        if (!libro.final) libro.final = hoy;
-    } else if (nuevoEstado === 'Pendiente') {
-        libro.inicio = null;
-        libro.final = null;
+        campos.inicio = libro.inicio || hoy;
+        campos.final = libro.final || hoy;
+    } else {
+        campos.inicio = null;
+        campos.final = null;
     }
 
-    calcularDias(libro);
-    await guardarLectura(parseInt(index));
+    await persistirLibro(libro, campos);
     actualizarInterfaz();
 }
 
-function formatearFechaEspañol(fecha) {
-    const meses = [
-        'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-        'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
-    ];
-    const dia = String(fecha.getDate()).padStart(2, '0');
-    const mes = meses[fecha.getMonth()];
-    const año = fecha.getFullYear();
-    return `${dia}/${mes}/${año}`;
+// ========================================
+// CRUD de temas
+// ========================================
+function abrirModalTema(id = null) {
+    if (!puedeEditarCatalogo()) {
+        alert('Necesitas iniciar sesión para editar temas.');
+        return;
+    }
+
+    const tema = id ? temas.find(t => t.id === id) : null;
+
+    document.getElementById('tema-modal-titulo').textContent = tema ? 'Editar tema' : 'Nuevo tema';
+    document.getElementById('tema-nombre').value = tema?.nombre || '';
+    document.getElementById('tema-color').value = tema?.color || '#00D9A3';
+    document.getElementById('tema-id').value = id || '';
+
+    const btnBorrar = document.getElementById('btn-borrar-tema');
+    btnBorrar.style.display = tema ? '' : 'none';
+
+    document.getElementById('tema-modal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function cerrarModalTema() {
+    document.getElementById('tema-modal').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+async function guardarTema(event) {
+    event.preventDefault();
+
+    const id = document.getElementById('tema-id').value || null;
+    const nombre = document.getElementById('tema-nombre').value.trim();
+    const color = document.getElementById('tema-color').value;
+
+    if (!nombre) {
+        alert('El tema necesita un nombre.');
+        return;
+    }
+
+    if (id) {
+        const ok = await actualizarTemaDB(id, { nombre, color });
+        if (!ok) {
+            alert('No se pudo guardar el tema. ¿Ya existe otro con ese nombre?');
+            return;
+        }
+        const tema = temas.find(t => t.id === id);
+        if (tema) Object.assign(tema, { nombre, color });
+    } else {
+        const creado = await crearTemaDB(nombre, color, temas.length);
+        if (!creado) {
+            alert('No se pudo crear el tema. ¿Ya existe otro con ese nombre?');
+            return;
+        }
+        temas.push(creado);
+        temaActual = creado.id;
+    }
+
+    escribirCacheLocal();
+    cerrarModalTema();
+    aplicarColorTema();
+    actualizarInterfaz();
+}
+
+async function borrarTema() {
+    const id = document.getElementById('tema-id').value;
+    if (!id) return;
+
+    const afectados = libros.filter(l => l.tema_id === id).length;
+    const aviso = afectados
+        ? `Se borrará el tema. Sus ${afectados} libros NO se borran: quedarán en "Sin tema" para que los reasignes.`
+        : 'Se borrará el tema.';
+
+    if (!confirm(aviso + '\n\n¿Continuar?')) return;
+
+    const ok = await borrarTemaDB(id);
+    if (!ok) {
+        alert('No se pudo borrar el tema.');
+        return;
+    }
+
+    temas = temas.filter(t => t.id !== id);
+    libros.forEach(l => { if (l.tema_id === id) l.tema_id = null; });
+    if (temaActual === id) temaActual = null;
+
+    escribirCacheLocal();
+    cerrarModalTema();
+    aplicarColorTema();
+    actualizarInterfaz();
 }
 
 // ========================================
-// Aplicar filtro (desde sidebar o desde stat-items)
+// CRUD de libros
+// ========================================
+function abrirModalLibro(id = null) {
+    if (!puedeEditarCatalogo()) {
+        alert('Necesitas iniciar sesión para añadir o editar libros.');
+        return;
+    }
+
+    const libro = id ? buscarLibro(id) : null;
+
+    document.getElementById('libro-modal-titulo').textContent = libro ? 'Editar libro' : 'Nuevo libro';
+    document.getElementById('libro-id').value = id || '';
+    document.getElementById('libro-titulo').value = libro?.titulo || '';
+    document.getElementById('libro-autor').value = libro?.autor || '';
+    document.getElementById('libro-anio').value = libro?.año || '';
+    document.getElementById('libro-paginas').value = libro?.paginas || '';
+    document.getElementById('libro-resumen').value = libro?.resumen || '';
+
+    const selector = document.getElementById('libro-tema');
+    selector.innerHTML = '<option value="">Sin tema</option>';
+    temas.forEach(t => {
+        const opcion = document.createElement('option');
+        opcion.value = t.id;
+        opcion.textContent = t.nombre;
+        selector.appendChild(opcion);
+    });
+    selector.value = libro?.tema_id
+        || (temaActual && temaActual !== 'sin-tema' ? temaActual : '');
+
+    document.getElementById('btn-borrar-libro').style.display = libro ? '' : 'none';
+
+    document.getElementById('libro-modal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function cerrarModalLibro() {
+    document.getElementById('libro-modal').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+async function guardarLibro(event) {
+    event.preventDefault();
+
+    const id = document.getElementById('libro-id').value || null;
+    const titulo = document.getElementById('libro-titulo').value.trim();
+
+    if (!titulo) {
+        alert('El libro necesita un título.');
+        return;
+    }
+
+    const anio = parseInt(document.getElementById('libro-anio').value, 10);
+    const paginas = parseInt(document.getElementById('libro-paginas').value, 10);
+
+    const campos = {
+        titulo,
+        autor: document.getElementById('libro-autor').value.trim() || null,
+        año: Number.isNaN(anio) ? null : anio,
+        paginas: Number.isNaN(paginas) ? null : paginas,
+        resumen: document.getElementById('libro-resumen').value.trim() || null,
+        tema_id: document.getElementById('libro-tema').value || null
+    };
+
+    if (id) {
+        const libro = buscarLibro(id);
+        if (!libro) return;
+        const ok = await actualizarLibroDB(id, campos);
+        if (!ok) {
+            alert('No se pudo guardar el libro.');
+            return;
+        }
+        Object.assign(libro, campos);
+    } else {
+        const creado = await crearLibroDB({ ...campos, estado: 'Pendiente', orden: libros.length });
+        if (!creado) {
+            alert('No se pudo crear el libro.');
+            return;
+        }
+        libros.push(creado);
+    }
+
+    escribirCacheLocal();
+    cerrarModalLibro();
+    actualizarInterfaz();
+}
+
+async function borrarLibro() {
+    const id = document.getElementById('libro-id').value;
+    if (!id) return;
+
+    const libro = buscarLibro(id);
+    if (!libro) return;
+
+    if (!confirm(`Se borrará "${libro.titulo}" y su progreso de lectura. Esto no se puede deshacer.\n\n¿Continuar?`)) {
+        return;
+    }
+
+    const ok = await borrarLibroDB(id);
+    if (!ok) {
+        alert('No se pudo borrar el libro.');
+        return;
+    }
+
+    libros = libros.filter(l => l.id !== id);
+    escribirCacheLocal();
+    cerrarModalLibro();
+    actualizarInterfaz();
+}
+
+// ========================================
+// Filtros por estado
 // ========================================
 function aplicarFiltro(filtro) {
     filtroActual = filtro;
-    // Sincronizar botones del sidebar
-    const filterButtons = document.querySelectorAll('.filter-btn');
-    filterButtons.forEach(btn => {
+    document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.filter === filtro);
     });
     renderizarLibros();
 }
 
 // ========================================
-// Event Listeners
+// Sidebar mobile
+// ========================================
+function abrirSidebarMobile() {
+    document.querySelector('.sidebar')?.classList.add('sidebar-open');
+    document.getElementById('sidebar-overlay')?.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function cerrarSidebarMobile() {
+    document.querySelector('.sidebar')?.classList.remove('sidebar-open');
+    document.getElementById('sidebar-overlay')?.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+// ========================================
+// Event listeners
 // ========================================
 function inicializarEventListeners() {
     if (eventListenersInicializados) return;
     eventListenersInicializados = true;
 
-    // Toggle vista grid / lista
+    // Vista grid / lista
     const viewBtns = document.querySelectorAll('.view-btn');
     viewBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             viewBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             vistaActual = btn.dataset.view;
-            const grid = document.getElementById('books-grid');
-            if (grid) {
-                grid.classList.toggle('view-list', vistaActual === 'list');
-            }
+            document.getElementById('books-grid')?.classList.toggle('view-list', vistaActual === 'list');
         });
     });
 
-    // Click en estadísticas → filtra por estado
+    // Estadísticas clicables → filtran por estado
     const statItems = document.querySelectorAll('.stat-item');
     statItems.forEach(item => {
-        item.classList.add('clickeable');
         const filtro = item.dataset.filter;
         if (!filtro) return;
+        item.classList.add('clickeable');
         item.addEventListener('click', () => {
-            // Activar el filtro correspondiente
             aplicarFiltro(filtro);
-            // Highlight visual en stat-item
             statItems.forEach(s => s.classList.remove('active'));
             item.classList.add('active');
         });
     });
 
-    // Mobile sidebar toggle
-    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
-    const sidebarEl = document.querySelector('.sidebar');
-    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    // Sidebar mobile
+    document.getElementById('mobile-menu-btn')?.addEventListener('click', abrirSidebarMobile);
+    document.getElementById('sidebar-overlay')?.addEventListener('click', cerrarSidebarMobile);
 
-    function abrirSidebar() {
-        if (sidebarEl) sidebarEl.classList.add('sidebar-open');
-        if (sidebarOverlay) sidebarOverlay.classList.add('active');
-        document.body.style.overflow = 'hidden';
-    }
-
-    function cerrarSidebar() {
-        if (sidebarEl) sidebarEl.classList.remove('sidebar-open');
-        if (sidebarOverlay) sidebarOverlay.classList.remove('active');
-        document.body.style.overflow = '';
-    }
-
-    if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', abrirSidebar);
-    if (sidebarOverlay) sidebarOverlay.addEventListener('click', cerrarSidebar);
-
-    // Cerrar sidebar con Escape
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && sidebarEl && sidebarEl.classList.contains('sidebar-open')) {
-            cerrarSidebar();
-        }
-    });
-
-    // Filtros del sidebar
+    // Filtros por estado
     const filterButtons = document.querySelectorAll('.filter-btn');
     filterButtons.forEach(btn => {
         btn.addEventListener('click', () => {
-            filterButtons.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            // Quitar highlight de stat-items al usar filtros del sidebar
             document.querySelectorAll('.stat-item').forEach(s => s.classList.remove('active'));
-            filtroActual = btn.dataset.filter;
-            renderizarLibros();
-            // Cerrar sidebar en mobile al seleccionar filtro
-            if (window.innerWidth <= 768) cerrarSidebar();
+            aplicarFiltro(btn.dataset.filter);
+            if (window.innerWidth <= 768) cerrarSidebarMobile();
         });
     });
 
     // Búsqueda con debounce
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
-        let searchTimeout;
+        let temporizador;
         searchInput.addEventListener('input', () => {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => renderizarLibros(), 300);
+            clearTimeout(temporizador);
+            temporizador = setTimeout(renderizarLibros, 300);
         });
     }
 
@@ -771,84 +1027,67 @@ function inicializarEventListeners() {
             tabBtns.forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             btn.classList.add('active');
-            const tabId = btn.dataset.tab + '-tab';
-            const tabContent = document.getElementById(tabId);
-            if (tabContent) tabContent.classList.add('active');
+            document.getElementById(btn.dataset.tab + '-tab')?.classList.add('active');
         });
     });
 
-    // Modal
-    const modalClose = document.getElementById('modal-close');
-    const modalBackdrop = document.getElementById('modal-backdrop');
-    const editForm = document.getElementById('edit-form');
-    const toggleAdvanced = document.getElementById('toggle-advanced');
+    // Modal de lectura
+    document.getElementById('modal-close')?.addEventListener('click', cerrarModal);
+    document.getElementById('modal-backdrop')?.addEventListener('click', cerrarModal);
+    document.getElementById('edit-form')?.addEventListener('submit', guardarEdicion);
 
-    if (modalClose) modalClose.addEventListener('click', cerrarModal);
-    if (modalBackdrop) modalBackdrop.addEventListener('click', cerrarModal);
-
-    if (editForm) {
-        editForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            guardarEdicion(e);
-        });
-    }
-
-    if (toggleAdvanced) {
-        toggleAdvanced.addEventListener('click', () => {
-            const advancedForm = document.getElementById('advanced-form');
-            const isVisible = advancedForm.style.display !== 'none';
-            advancedForm.style.display = isVisible ? 'none' : 'block';
-            toggleAdvanced.classList.toggle('active');
-        });
-    }
-
-    // Cerrar modal con tecla Escape
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && document.getElementById('edit-modal').classList.contains('active')) {
-            cerrarModal();
-        }
+    document.getElementById('toggle-advanced')?.addEventListener('click', () => {
+        const form = document.getElementById('advanced-form');
+        const visible = form.style.display !== 'none';
+        form.style.display = visible ? 'none' : 'block';
+        document.getElementById('toggle-advanced').classList.toggle('active');
     });
 
-    // Respaldo: exportar / importar
-    const btnExportar = document.getElementById('btn-exportar');
+    // CRUD de temas
+    document.getElementById('btn-nuevo-tema')?.addEventListener('click', () => abrirModalTema(null));
+    document.getElementById('tema-modal-close')?.addEventListener('click', cerrarModalTema);
+    document.getElementById('tema-modal-backdrop')?.addEventListener('click', cerrarModalTema);
+    document.getElementById('tema-form')?.addEventListener('submit', guardarTema);
+    document.getElementById('btn-borrar-tema')?.addEventListener('click', borrarTema);
+
+    // CRUD de libros
+    document.getElementById('btn-nuevo-libro')?.addEventListener('click', () => abrirModalLibro(null));
+    document.getElementById('libro-modal-close')?.addEventListener('click', cerrarModalLibro);
+    document.getElementById('libro-modal-backdrop')?.addEventListener('click', cerrarModalLibro);
+    document.getElementById('libro-form')?.addEventListener('submit', guardarLibro);
+    document.getElementById('btn-borrar-libro')?.addEventListener('click', borrarLibro);
+
+    // Respaldo
+    document.getElementById('btn-exportar')?.addEventListener('click', exportarDatos);
     const btnImportar = document.getElementById('btn-importar');
     const inputImportar = document.getElementById('input-importar');
-
-    if (btnExportar) btnExportar.addEventListener('click', exportarDatos);
     if (btnImportar && inputImportar) {
         btnImportar.addEventListener('click', () => inputImportar.click());
-        inputImportar.addEventListener('change', async (e) => {
+        inputImportar.addEventListener('change', async e => {
             await importarDatos(e.target.files[0]);
-            e.target.value = ''; // permitir reimportar el mismo archivo
+            e.target.value = '';
         });
     }
 
-    // Reintentar conexión desde el banner offline
-    const btnReintentar = document.getElementById('btn-reintentar');
-    if (btnReintentar) btnReintentar.addEventListener('click', () => location.reload());
+    document.getElementById('btn-reintentar')?.addEventListener('click', () => location.reload());
+
+    // Escape cierra lo que esté abierto
+    document.addEventListener('keydown', e => {
+        if (e.key !== 'Escape') return;
+        if (document.getElementById('libro-modal')?.classList.contains('active')) return cerrarModalLibro();
+        if (document.getElementById('tema-modal')?.classList.contains('active')) return cerrarModalTema();
+        if (document.getElementById('edit-modal')?.classList.contains('active')) return cerrarModal();
+        if (document.querySelector('.sidebar')?.classList.contains('sidebar-open')) return cerrarSidebarMobile();
+    });
 }
 
 // ========================================
-// Utilidades
+// API global (la usa auth.js)
 // ========================================
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-// Exportar funciones globales
 window.gaboApp = {
     get libros() { return libros; },
+    get temas() { return temas; },
     cargarDatos,
-    guardarDatos,
-    resetearDatos,
     exportarDatos,
     importarDatos,
     actualizarInterfaz,

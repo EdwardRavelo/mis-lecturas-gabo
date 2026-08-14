@@ -164,8 +164,8 @@ async function onLogin(usuario) {
     ocultarBannerOffline();
     actualizarUIUsuario(usuario);
 
-    // Migrar datos locales si aplica, luego cargar desde Supabase
-    await migrarDesdeLocalStorage();
+    // Ya no hay migración desde localStorage: con el esquema v2 el catálogo
+    // vive en Supabase y localStorage es solo caché de lectura.
     await window.gaboApp.cargarDatos();
     window.gaboApp.actualizarInterfaz();
 }

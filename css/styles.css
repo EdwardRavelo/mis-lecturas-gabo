@@ -2721,3 +2721,213 @@ body {
 .comentarios-saved.visible {
     opacity: 1;
 }
+
+/* ========================================
+   Navegación por temas (sidebar)
+   ======================================== */
+/* --tema-acento lo inyecta app.js con el color del tema activo;
+   este valor es el respaldo cuando no hay tema o no tiene color. */
+:root {
+    --tema-acento: var(--primary);
+}
+
+.sidebar-temas {
+    margin-top: var(--space-lg);
+}
+
+.temas-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-sm);
+}
+
+.btn-nuevo-tema {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.btn-nuevo-tema:hover {
+    background: var(--tema-acento);
+    border-color: var(--tema-acento);
+    color: var(--negro);
+}
+
+.temas-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.tema-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.65rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.tema-btn:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.tema-btn.active {
+    background: var(--bg-card);
+    border-color: var(--tema-acento);
+    color: var(--text-primary);
+}
+
+.tema-punto {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: 50%;
+}
+
+.tema-nombre {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tema-count {
+    flex-shrink: 0;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.tema-editar {
+    flex-shrink: 0;
+    opacity: 0;
+    padding: 0 0.2rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+.tema-btn:hover .tema-editar {
+    opacity: 1;
+}
+
+.tema-editar:hover {
+    color: var(--tema-acento);
+}
+
+/* ========================================
+   Añadir libro
+   ======================================== */
+.btn-nuevo-libro {
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--tema-acento);
+    background: transparent;
+    color: var(--tema-acento);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.btn-nuevo-libro:hover {
+    background: var(--tema-acento);
+    color: var(--negro);
+}
+
+.modal-editar-libro {
+    width: 100%;
+    margin-top: var(--space-sm);
+    padding: 0.6rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.modal-editar-libro:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+/* ========================================
+   Modales de formulario (tema / libro)
+   ======================================== */
+.modal-content-sm {
+    max-width: 480px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-form-title {
+    margin-bottom: var(--space-lg);
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    color: var(--text-primary);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-md);
+}
+
+.form-input-color {
+    height: 44px;
+    padding: 0.25rem;
+    cursor: pointer;
+}
+
+.btn-peligro {
+    margin-top: var(--space-sm);
+    background: transparent;
+    border: 1px solid rgba(255, 107, 107, 0.4);
+    color: #ff6b6b;
+}
+
+.btn-peligro:hover {
+    background: rgba(255, 107, 107, 0.15);
+    border-color: rgba(255, 107, 107, 0.6);
+}
+
+/* ========================================
+   Estado vacío
+   ======================================== */
+.grid-vacio {
+    grid-column: 1 / -1;
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}

@@ -89,9 +89,20 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="decorative-line"></div>
-                <h1 class="library-title">Gabriel<br>García Márquez</h1>
+                <h1 class="library-title">Diario de<br>Lecturas</h1>
                 <p class="library-subtitle">Biblioteca Personal</p>
                 <div class="decorative-butterfly">✦</div>
+            </div>
+
+            <!-- Navegación por temas -->
+            <div class="sidebar-temas">
+                <div class="temas-header">
+                    <h3 class="filter-title">Temas</h3>
+                    <button class="btn-nuevo-tema" id="btn-nuevo-tema" title="Nuevo tema">+</button>
+                </div>
+                <div class="temas-list" id="temas-list">
+                    <!-- Los temas se generan dinámicamente -->
+                </div>
             </div>
 
             <!-- Estadísticas Compactas -->
@@ -180,8 +191,9 @@
             <!-- Sección de Libros -->
             <section class="books-section">
                 <div class="section-header">
-                    <h2 class="section-title" data-text="Colección">Colección</h2>
+                    <h2 class="section-title" id="section-title" data-text="Todas mis lecturas">Todas mis lecturas</h2>
                     <div class="view-options">
+                        <button class="btn-nuevo-libro" id="btn-nuevo-libro" title="Añadir libro">+ Libro</button>
                         <button class="view-btn active" data-view="grid">⊞</button>
                         <button class="view-btn" data-view="list">☰</button>
                     </div>
@@ -300,6 +312,9 @@
                             <span class="btn-label">Completar</span>
                         </button>
                     </div>
+                    <button class="modal-editar-libro" id="btn-editar-libro" type="button">
+                        Editar datos del libro
+                    </button>
                 </div>
 
                 <!-- Fechas (colapsable) -->
@@ -349,6 +364,97 @@
                         <span class="comentarios-saved" id="comentarios-saved">¡Guardado!</span>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================ -->
+    <!-- Modal: crear / editar tema       -->
+    <!-- ================================ -->
+    <div class="modal modal-form" id="tema-modal">
+        <div class="modal-backdrop" id="tema-modal-backdrop"></div>
+        <div class="modal-content modal-content-sm">
+            <button class="modal-close" id="tema-modal-close" type="button">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+
+            <div class="modal-body">
+                <h3 class="modal-form-title" id="tema-modal-titulo">Nuevo tema</h3>
+
+                <form id="tema-form">
+                    <input type="hidden" id="tema-id">
+
+                    <div class="form-group">
+                        <label class="form-label" for="tema-nombre">Nombre</label>
+                        <input type="text" id="tema-nombre" class="form-input" placeholder="ej: Realismo mágico" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="tema-color">Color de acento</label>
+                        <input type="color" id="tema-color" class="form-input form-input-color" value="#00D9A3">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-full">Guardar tema</button>
+                    <button type="button" class="btn btn-peligro btn-full" id="btn-borrar-tema">Borrar tema</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================ -->
+    <!-- Modal: crear / editar libro      -->
+    <!-- ================================ -->
+    <div class="modal modal-form" id="libro-modal">
+        <div class="modal-backdrop" id="libro-modal-backdrop"></div>
+        <div class="modal-content modal-content-sm">
+            <button class="modal-close" id="libro-modal-close" type="button">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+
+            <div class="modal-body">
+                <h3 class="modal-form-title" id="libro-modal-titulo">Nuevo libro</h3>
+
+                <form id="libro-form">
+                    <input type="hidden" id="libro-id">
+
+                    <div class="form-group">
+                        <label class="form-label" for="libro-titulo">Título</label>
+                        <input type="text" id="libro-titulo" class="form-input" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="libro-autor">Autor</label>
+                        <input type="text" id="libro-autor" class="form-input">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="libro-anio">Año</label>
+                            <input type="number" id="libro-anio" class="form-input" min="0" max="2100">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="libro-paginas">Páginas</label>
+                            <input type="number" id="libro-paginas" class="form-input" min="0">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="libro-tema">Tema</label>
+                        <select id="libro-tema" class="form-input"></select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="libro-resumen">Resumen</label>
+                        <textarea id="libro-resumen" class="form-input" rows="4"></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-full">Guardar libro</button>
+                    <button type="button" class="btn btn-peligro btn-full" id="btn-borrar-libro">Borrar libro</button>
+                </form>
             </div>
         </div>
     </div>
