@@ -148,10 +148,8 @@
             <!-- Gráficas Compactas -->
             <div class="sidebar-charts">
                 <div class="chart-mini">
-                    <h4 class="chart-mini-title">Estado</h4>
-                    <div class="chart-canvas-wrapper">
-                        <canvas id="status-chart"></canvas>
-                    </div>
+                    <h4 class="chart-mini-title">Reparto</h4>
+                    <div id="estado-chart"></div>
                 </div>
             </div>
 
@@ -244,6 +242,7 @@
                     <span class="modal-year" id="modal-year"></span>
                     <h2 class="modal-title" id="modal-title"></h2>
                     <div class="modal-meta">
+                        <span id="modal-autor"></span>
                         <span id="modal-pages"></span>
                         <span class="separator">•</span>
                         <span id="modal-estado-badge"></span>
@@ -258,6 +257,9 @@
                 <div class="modal-section">
                     <h3 class="modal-section-title">Sobre el libro</h3>
                     <p class="modal-description" id="modal-description"></p>
+                    <a class="modal-enlace" id="modal-enlace" target="_blank" rel="noopener noreferrer" style="display:none;">
+                        Abrir enlace ↗
+                    </a>
                 </div>
 
                 <!-- Información de lectura -->
@@ -442,9 +444,36 @@
                         </div>
                     </div>
 
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="libro-tema">Tema</label>
+                            <select id="libro-tema" class="form-input"></select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="libro-subtema">Subtema</label>
+                            <input type="text" id="libro-subtema" class="form-input"
+                                   list="subtemas-existentes" placeholder="opcional">
+                            <datalist id="subtemas-existentes"></datalist>
+                        </div>
+                    </div>
+
                     <div class="form-group">
-                        <label class="form-label" for="libro-tema">Tema</label>
-                        <select id="libro-tema" class="form-input"></select>
+                        <label class="form-label" for="libro-tipo">Tipo</label>
+                        <input type="text" id="libro-tipo" class="form-input"
+                               list="tipos-existentes" placeholder="Libro, Documentación, Curso…">
+                        <datalist id="tipos-existentes">
+                            <option value="Libro"></option>
+                            <option value="Documentación"></option>
+                            <option value="Curso"></option>
+                            <option value="Vídeo"></option>
+                            <option value="Película"></option>
+                            <option value="Artículo"></option>
+                        </datalist>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="libro-enlace">Enlace</label>
+                        <input type="url" id="libro-enlace" class="form-input" placeholder="https://…">
                     </div>
 
                     <div class="form-group">

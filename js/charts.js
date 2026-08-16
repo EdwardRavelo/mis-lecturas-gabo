@@ -1,291 +1,216 @@
 // ========================================
-// Sistema de Gráficas con Chart.js
+// Visualizaciones
 // ========================================
+// Dos piezas, cada una con la forma que le toca:
+//
+//   Reparto por estado  → part-to-whole → BARRA APILADA en HTML plano.
+//     Antes era un doughnut. Un anillo obliga a comparar ángulos, y en una
+//     columna estrecha desperdicia el espacio; la barra apilada se lee de un
+//     vistazo y admite etiquetas reales.
+//
+//   Páginas por mes     → magnitud en el tiempo → barras, UNA sola serie y
+//     por tanto un solo color (nunca una rampa sobre categorías: duplicaría
+//     en el color lo que ya dice la altura).
+//
+// Reglas aplicadas de la skill dataviz:
+//   · hueco de 2px del color de superficie entre segmentos, no borde
+//   · rejilla y ejes en línea fina SÓLIDA (nunca punteada) y discreta
+//   · leyenda presente con ≥2 series; los valores van en tinta, no en el
+//     color de la serie
+//   · el tooltip no es la única vía al dato: el eje Y y la leyenda lo dan
+//   · sin doble eje, jamás
 
-let statusChart = null;
 let pagesChart = null;
 
-// Configuración de colores - Paleta Modernista
-const chartColors = {
-    leido: 'rgba(0, 217, 163, 0.7)',
-    leyendo: 'rgba(255, 217, 61, 0.7)',
-    pendiente: 'rgba(167, 139, 250, 0.5)',
-    leidoBorder: 'rgba(0, 217, 163, 1)',
-    leyendoBorder: 'rgba(255, 217, 61, 1)',
-    pendienteBorder: 'rgba(167, 139, 250, 1)',
-    tierra: 'rgba(255, 107, 157, 0.7)',
-    amarillo: 'rgba(255, 217, 61, 0.8)',
-    verde: 'rgba(0, 217, 163, 0.8)',
-    caribe: 'rgba(0, 217, 163, 1)'
-};
-
-// ¿Cargó el CDN de Chart.js? Si no, las gráficas se omiten en silencio
-// en vez de romper el renderizado del resto de la app.
 const chartJsDisponible = typeof Chart !== 'undefined';
 
-// Configuración común de Chart.js
 if (chartJsDisponible) {
-    Chart.defaults.font.family = "'DM Sans', sans-serif";
-    Chart.defaults.color = 'rgba(255, 255, 255, 0.7)';
+    Chart.defaults.font.family = "'DM Sans', system-ui, sans-serif";
 } else {
-    console.warn('[Charts] Chart.js no está disponible; se omiten las gráficas.');
+    console.warn('[Charts] Chart.js no está disponible; se omite la gráfica de páginas.');
 }
 
-// Función para crear gráfica de distribución por estado (Pie Chart)
-function createStatusChart(libros) {
-    const ctx = document.getElementById('status-chart');
-    if (!ctx) return;
-    
-    // Contar libros por estado
-    const estados = {
-        'Leído': 0,
-        'Leyendo': 0,
-        'Pendiente': 0
-    };
-    
-    libros.forEach(libro => {
-        if (estados.hasOwnProperty(libro.estado)) {
-            estados[libro.estado]++;
-        }
+// Los colores salen del sistema de diseño, no se repiten a mano aquí.
+function token(nombre, respaldo) {
+    const valor = getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
+    return valor || respaldo;
+}
+
+// ----------------------------------------
+// Reparto por estado — barra apilada
+// ----------------------------------------
+
+function renderBarraEstados(libros) {
+    const contenedor = document.getElementById('estado-chart');
+    if (!contenedor) return;
+
+    const estados = [
+        { clave: 'Leído', etiqueta: 'Leídos', color: token('--leido', '#199e70') },
+        { clave: 'Leyendo', etiqueta: 'Leyendo', color: token('--leyendo', '#c98500') },
+        { clave: 'Pendiente', etiqueta: 'Pendientes', color: token('--pendiente', '#9085e9') }
+    ];
+
+    const total = libros.length;
+
+    estados.forEach(e => {
+        e.valor = libros.filter(l => l.estado === e.clave).length;
+        e.pct = total ? (e.valor / total) * 100 : 0;
     });
-    
-    // Destruir gráfica anterior si existe
-    if (statusChart) {
-        statusChart.destroy();
+
+    if (!total) {
+        contenedor.innerHTML = '<p class="grid-vacio" style="padding:1rem 0">Sin libros todavía.</p>';
+        return;
     }
-    
-    // Crear nueva gráfica
-    statusChart = new Chart(ctx, {
-        type: 'doughnut',
+
+    const segmentos = estados
+        .filter(e => e.valor > 0)
+        .map(e => `<div class="estado-segmento"
+                        style="flex:${e.valor};background:${e.color}"
+                        title="${e.etiqueta}: ${e.valor} de ${total}"></div>`)
+        .join('');
+
+    // La leyenda lleva nombre y valor SIEMPRE: la identidad nunca depende
+    // solo del color, y el dato es legible sin pasar el ratón.
+    const leyenda = estados.map(e => `
+        <div class="estado-leyenda-fila">
+            <span class="estado-leyenda-punto" style="background:${e.color}"></span>
+            <span class="estado-leyenda-nombre">${e.etiqueta}</span>
+            <span class="estado-leyenda-valor">${e.valor}</span>
+        </div>
+    `).join('');
+
+    contenedor.innerHTML = `<div class="estado-barra">${segmentos}</div>
+                            <div class="estado-leyenda">${leyenda}</div>`;
+}
+
+// ----------------------------------------
+// Páginas por mes — barras
+// ----------------------------------------
+
+function createPagesChart(libros) {
+    const ctx = document.getElementById('pages-chart');
+    if (!ctx || !chartJsDisponible) return;
+
+    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+                   'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+    const porMes = {};
+
+    libros.forEach(libro => {
+        if (libro.estado !== 'Leído' || !libro.final) return;
+        const fecha = parseFechaEspañol(libro.final);
+        if (!fecha) return;
+
+        const clave = `${meses[fecha.getMonth()]} ${fecha.getFullYear()}`;
+        if (!porMes[clave]) porMes[clave] = { paginas: 0, libros: 0, fecha };
+        porMes[clave].paginas += libro.paginas || 0;
+        porMes[clave].libros++;
+    });
+
+    const ordenados = Object.keys(porMes).sort((a, b) => porMes[a].fecha - porMes[b].fecha);
+    const etiquetas = ordenados;
+    const valores = ordenados.map(m => porMes[m].paginas);
+    const cuentas = ordenados.map(m => porMes[m].libros);
+
+    if (pagesChart) pagesChart.destroy();
+
+    const contenedor = ctx.parentElement;
+
+    if (!etiquetas.length) {
+        // Un gráfico vacío con un "Sin datos" falso es peor que decirlo.
+        if (contenedor) {
+            contenedor.querySelector('.grid-vacio')?.remove();
+            ctx.style.display = 'none';
+            contenedor.insertAdjacentHTML('beforeend',
+                '<p class="grid-vacio">Aún no has terminado ningún libro con fecha.</p>');
+        }
+        return;
+    }
+
+    ctx.style.display = '';
+    contenedor?.querySelector('.grid-vacio')?.remove();
+
+    const tinta = token('--tinta', '#F5F1E8');
+    const tenue = token('--tinta-tenue', '#8A857A');
+    const rejilla = token('--rejilla', 'rgba(245,241,232,0.06)');
+    const superficie = token('--superficie', '#171613');
+    const acento = token('--tema-acento', '#3987e5');
+
+    pagesChart = new Chart(ctx, {
+        type: 'bar',
         data: {
-            labels: ['Leídos', 'Leyendo', 'Pendientes'],
+            labels: etiquetas,
             datasets: [{
-                label: 'Libros',
-                data: [estados['Leído'], estados['Leyendo'], estados['Pendiente']],
-                backgroundColor: [
-                    chartColors.leido,
-                    chartColors.leyendo,
-                    chartColors.pendiente
-                ],
-                borderColor: [
-                    chartColors.leidoBorder,
-                    chartColors.leyendoBorder,
-                    chartColors.pendienteBorder
-                ],
-                borderWidth: 2,
-                hoverOffset: 10
+                label: 'Páginas leídas',
+                data: valores,
+                backgroundColor: acento,
+                // Extremo redondeado de 4px anclado a la línea base
+                borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+                borderSkipped: 'bottom',
+                borderWidth: 0,
+                maxBarThickness: 34
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            cutout: '70%',
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(10, 22, 40, 0.9)',
-                    padding: 12,
-                    borderColor: 'rgba(0, 217, 163, 0.3)',
-                    borderWidth: 1,
-                    titleColor: '#FFFFFF',
-                    bodyColor: 'rgba(255, 255, 255, 0.8)',
-                    titleFont: {
-                        size: 14,
-                        weight: 'bold',
-                        family: "'DM Sans', sans-serif"
-                    },
-                    bodyFont: {
-                        size: 13,
-                        family: "'DM Sans', sans-serif"
-                    },
-                    cornerRadius: 8,
-                    callbacks: {
-                        label: function(context) {
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = ((context.parsed / total) * 100).toFixed(1);
-                            return `${context.label}: ${context.parsed} (${percentage}%)`;
-                        }
-                    }
-                }
-            },
-            animation: {
-                animateRotate: true,
-                animateScale: true,
-                duration: 1000,
-                easing: 'easeInOutQuart'
-            }
-        }
-    });
-}
-
-// Función para crear gráfica de páginas por mes (Bar Chart)
-function createPagesChart(libros) {
-    const ctx = document.getElementById('pages-chart');
-    if (!ctx) return;
-    
-    // Agrupar libros por mes de finalización
-    const mesesData = {};
-    const mesesEspañol = [
-        'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-        'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'
-    ];
-    
-    libros.forEach(libro => {
-        if (libro.estado === 'Leído' && libro.final) {
-            const fecha = parseFechaEspañol(libro.final);
-            if (fecha) {
-                const mesAño = `${mesesEspañol[fecha.getMonth()]} ${fecha.getFullYear()}`;
-                if (!mesesData[mesAño]) {
-                    mesesData[mesAño] = {
-                        paginas: 0,
-                        libros: 0,
-                        fecha: fecha
-                    };
-                }
-                mesesData[mesAño].paginas += libro.paginas;
-                mesesData[mesAño].libros++;
-            }
-        }
-    });
-    
-    // Ordenar por fecha
-    const mesesOrdenados = Object.keys(mesesData).sort((a, b) => {
-        return mesesData[a].fecha - mesesData[b].fecha;
-    });
-    
-    // Preparar datos para la gráfica
-    const labels = mesesOrdenados;
-    const datos = mesesOrdenados.map(mes => mesesData[mes].paginas);
-    const librosCount = mesesOrdenados.map(mes => mesesData[mes].libros);
-    
-    // Si no hay datos, mostrar mensaje
-    if (labels.length === 0) {
-        labels.push('Sin datos');
-        datos.push(0);
-        librosCount.push(0);
-    }
-    
-    // Destruir gráfica anterior si existe
-    if (pagesChart) {
-        pagesChart.destroy();
-    }
-    
-    // Crear nueva gráfica
-    pagesChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Páginas leídas',
-                data: datos,
-                backgroundColor: chartColors.verde,
-                borderColor: chartColors.caribe,
-                borderWidth: 2,
-                borderRadius: 8,
-                borderSkipped: false
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
             scales: {
                 y: {
                     beginAtZero: true,
+                    border: { display: false },
                     ticks: {
-                        color: 'rgba(255, 255, 255, 0.7)',
-                        font: {
-                            size: 12,
-                            family: "'DM Sans', sans-serif"
-                        },
-                        callback: function(value) {
-                            return value + ' pág.';
-                        }
+                        color: tenue,
+                        font: { size: 11 },
+                        padding: 8,
+                        callback: v => v.toLocaleString()
                     },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)',
-                        drawBorder: false
-                    }
+                    // Rejilla sólida y discreta: el punteado añade ruido y se
+                    // lee como "umbral" cuando solo es una guía.
+                    grid: { color: rejilla, drawTicks: false }
                 },
                 x: {
-                    ticks: {
-                        color: 'rgba(255, 255, 255, 0.7)',
-                        font: {
-                            size: 12,
-                            weight: '500',
-                            family: "'DM Sans', sans-serif"
-                        }
-                    },
-                    grid: {
-                        display: false,
-                        drawBorder: false
-                    }
+                    border: { color: rejilla },
+                    ticks: { color: tenue, font: { size: 11 }, padding: 6 },
+                    grid: { display: false }
                 }
             },
             plugins: {
-                legend: {
-                    display: false
-                },
+                // Una sola serie: el título de la tarjeta ya la nombra.
+                legend: { display: false },
                 tooltip: {
-                    backgroundColor: 'rgba(10, 22, 40, 0.95)',
-                    backdropFilter: 'blur(10px)',
-                    borderColor: 'rgba(0, 217, 163, 0.3)',
+                    backgroundColor: superficie,
+                    borderColor: rejilla,
                     borderWidth: 1,
-                    titleColor: '#FFFFFF',
-                    bodyColor: 'rgba(255, 255, 255, 0.9)',
-                    titleFont: {
-                        size: 14,
-                        weight: 'bold',
-                        family: "'DM Sans', sans-serif"
-                    },
-                    bodyFont: {
-                        size: 13,
-                        family: "'DM Sans', sans-serif"
-                    },
-                    padding: 12,
+                    titleColor: tinta,
+                    bodyColor: tinta,
+                    padding: 10,
                     cornerRadius: 8,
+                    displayColors: false,
                     callbacks: {
-                        label: function(context) {
-                            const index = context.dataIndex;
-                            const paginas = context.parsed.y;
-                            const libros = librosCount[index];
-                            return [
-                                `Páginas: ${paginas}`,
-                                `Libros: ${libros}`
-                            ];
-                        }
+                        label: c => [
+                            `${c.parsed.y.toLocaleString()} páginas`,
+                            `${cuentas[c.dataIndex]} ${cuentas[c.dataIndex] === 1 ? 'libro' : 'libros'}`
+                        ]
                     }
                 }
             },
-            animation: {
-                duration: 1000,
-                easing: 'easeInOutQuart'
-            }
+            animation: { duration: 500, easing: 'easeOutQuart' }
         }
     });
 }
 
-// Función para actualizar todas las gráficas
-function updateCharts(libros) {
-    if (!chartJsDisponible) return;
+// ----------------------------------------
 
-    // Un fallo aquí no debe impedir que se muestren los libros.
+function updateCharts(libros) {
+    // Un fallo aquí no debe impedir que se vean los libros.
     try {
-        createStatusChart(libros);
+        renderBarraEstados(libros);
         createPagesChart(libros);
     } catch (error) {
-        console.error('[Charts] Error al renderizar gráficas:', error);
+        console.error('[Charts] Error al renderizar:', error);
     }
 }
 
-// Inicializar gráficas cuando el DOM esté listo
-// (Se llamará desde app.js después de cargar los datos)
 function initCharts(libros) {
     updateCharts(libros);
-}
-
-// Exportar funciones
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { createStatusChart, createPagesChart, updateCharts, initCharts };
 }

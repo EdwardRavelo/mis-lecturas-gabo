@@ -450,7 +450,41 @@ function renderizarLibros() {
         return;
     }
 
-    visibles.forEach(libro => grid.appendChild(crearCardLibro(libro)));
+    // Agrupado por subtema, conservando el orden de aparición. Si ningún
+    // libro visible tiene subtema, se pinta la rejilla plana de siempre y no
+    // se muestra un encabezado "Sin subtema" que no aportaría nada.
+    const grupos = new Map();
+    visibles.forEach(libro => {
+        const clave = libro.subtema || '';
+        if (!grupos.has(clave)) grupos.set(clave, []);
+        grupos.get(clave).push(libro);
+    });
+
+    const haySubtemas = [...grupos.keys()].some(k => k !== '');
+
+    if (!haySubtemas) {
+        grid.classList.remove('agrupado');
+        visibles.forEach(libro => grid.appendChild(crearCardLibro(libro)));
+        return;
+    }
+
+    grid.classList.add('agrupado');
+
+    for (const [subtema, delGrupo] of grupos) {
+        const seccion = document.createElement('section');
+        seccion.className = 'subtema-grupo';
+        seccion.innerHTML = `
+            <h3 class="subtema-titulo">
+                <span>${escaparHtml(subtema || 'Sin subtema')}</span>
+                <span class="subtema-count">${delGrupo.length}</span>
+            </h3>
+            <div class="subtema-grid"></div>
+        `;
+
+        const contenedor = seccion.querySelector('.subtema-grid');
+        delGrupo.forEach(libro => contenedor.appendChild(crearCardLibro(libro)));
+        grid.appendChild(seccion);
+    }
 }
 
 function crearCardLibro(libro) {
@@ -485,14 +519,18 @@ function crearCardLibro(libro) {
                 : '<div class="book-cover-placeholder">📚</div>'}
         </div>
         <div class="book-info">
-            <div class="book-year">${libro.año ?? ''}</div>
-            <span class="book-status status-${claseEstado}">${libro.estado}</span>
             <h3 class="book-title">${escaparHtml(libro.titulo)}</h3>
-            <p class="book-pages">${libro.paginas ? libro.paginas + ' pág' : ''}</p>
-            ${progreso > 0 ? `
-                <div class="book-progress">
-                    <div class="book-progress-bar" style="width: ${progreso}%"></div>
-                </div>` : ''}
+            <p class="book-meta">
+                <span class="book-status status-${claseEstado}">${libro.estado}</span>
+                ${libro.tipo && libro.tipo !== 'Libro' ? `<span class="book-tipo">${escaparHtml(libro.tipo)}</span>` : ''}
+                ${libro.año ? `<span class="book-year">${libro.año}</span>` : ''}
+                ${libro.paginas ? `<span class="book-pages">${libro.paginas} pág</span>` : ''}
+            </p>
+            <div class="book-progress" role="progressbar"
+                 aria-valuenow="${Math.round(progreso)}" aria-valuemin="0" aria-valuemax="100"
+                 aria-label="Progreso de ${escaparHtml(libro.titulo)}">
+                <div class="book-progress-bar" style="width: ${progreso}%"></div>
+            </div>
         </div>
     `;
 
@@ -603,10 +641,23 @@ function abrirModalEdicion(id) {
         if (el) el.textContent = valor;
     };
 
-    poner('modal-year', libro.año ?? '');
+    poner('modal-year', [libro.año, libro.tipo].filter(Boolean).join(' · '));
     poner('modal-title', libro.titulo);
+    poner('modal-autor', libro.autor || '');
     poner('modal-pages', libro.paginas ? `${libro.paginas} páginas` : '');
     poner('modal-description', libro.resumen || 'Sin descripción disponible.');
+
+    // El enlace es lo más valioso del material de estudio: sin él, una fila
+    // como "Documentación MDN: Closures" no sirve de nada.
+    const enlace = document.getElementById('modal-enlace');
+    if (enlace) {
+        if (libro.enlace) {
+            enlace.href = libro.enlace;
+            enlace.style.display = '';
+        } else {
+            enlace.style.display = 'none';
+        }
+    }
     poner('modal-fecha-inicio', libro.inicio || '--');
     poner('modal-fecha-final', libro.final || '--');
     poner('modal-dias', libro.dias !== null ? `${libro.dias} días` : '--');
@@ -847,6 +898,19 @@ function abrirModalLibro(id = null) {
     document.getElementById('libro-anio').value = libro?.año || '';
     document.getElementById('libro-paginas').value = libro?.paginas || '';
     document.getElementById('libro-resumen').value = libro?.resumen || '';
+    document.getElementById('libro-tipo').value = libro?.tipo || '';
+    document.getElementById('libro-enlace').value = libro?.enlace || '';
+
+    // Al crear, hereda el subtema del grupo en el que estás mirando
+    document.getElementById('libro-subtema').value = libro?.subtema || '';
+
+    // Sugerencias con los subtemas que ya existen, para no inventar variantes
+    // ("Básico" y "basico" serían dos grupos distintos)
+    const sugerencias = document.getElementById('subtemas-existentes');
+    if (sugerencias) {
+        const usados = [...new Set(libros.map(l => l.subtema).filter(Boolean))].sort();
+        sugerencias.innerHTML = usados.map(s => `<option value="${escaparHtml(s)}"></option>`).join('');
+    }
 
     const selector = document.getElementById('libro-tema');
     selector.innerHTML = '<option value="">Sin tema</option>';
@@ -890,7 +954,10 @@ async function guardarLibro(event) {
         año: Number.isNaN(anio) ? null : anio,
         paginas: Number.isNaN(paginas) ? null : paginas,
         resumen: document.getElementById('libro-resumen').value.trim() || null,
-        tema_id: document.getElementById('libro-tema').value || null
+        tipo: document.getElementById('libro-tipo').value.trim() || null,
+        enlace: document.getElementById('libro-enlace').value.trim() || null,
+        tema_id: document.getElementById('libro-tema').value || null,
+        subtema: document.getElementById('libro-subtema').value.trim() || null
     };
 
     if (id) {
