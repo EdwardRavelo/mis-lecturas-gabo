@@ -66,16 +66,22 @@
    ======================================== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { -webkit-text-size-adjust: 100%; }
+html {
+    -webkit-text-size-adjust: 100%;
+    height: 100%;
+}
 
+/* La página no scrollea: lo hacen la sidebar, la rejilla y el modal, cada
+   uno por su cuenta. Ver "Layout" más abajo. */
 body {
+    height: 100%;
     background: var(--plano);
     color: var(--tinta);
     font-family: var(--fuente-texto);
     font-size: 15px;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
+    overflow: hidden;
 }
 
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -96,19 +102,23 @@ img { max-width: 100%; display: block; }
 }
 
 /* ========================================
-   Layout: sidebar fija + main con scroll propio
-   ======================================== */
+   Layout: app shell de 100dvh
+   ========================================
+   La ventana se reparte de una vez y nada la desborda. Sólo scrollean la
+   sidebar, #books-grid y el cuerpo del modal.
+
+   OJO: .library-layout tiene que seguir funcionando como flex — auth.js le
+   asigna `style.display = 'flex'` al ocultar el login, lo que pisaría
+   cualquier `display: grid` que se pusiera aquí. */
 .library-layout {
     display: flex;
-    min-height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
 }
 
 .sidebar {
     width: var(--ancho-sidebar);
     flex-shrink: 0;
-    height: 100vh;
-    position: sticky;
-    top: 0;
     display: flex;
     flex-direction: column;
     gap: var(--esp-lg);
@@ -118,13 +128,15 @@ img { max-width: 100%; display: block; }
     overflow-y: auto;
 }
 
+/* Columna: cabecera fija, rejilla elástica, panel de análisis abajo.
+   El padding ya no vive aquí, sino en cada bloque, porque si no el
+   contenedor con scroll recortaría por dentro del margen. */
 .main-content {
     flex: 1;
     min-width: 0;
-    padding: var(--esp-xl);
     display: flex;
     flex-direction: column;
-    gap: var(--esp-xl);
+    overflow: hidden;
 }
 
 .sidebar-overlay {
@@ -435,17 +447,19 @@ img { max-width: 100%; display: block; }
    Cabecera de sección
    ======================================== */
 .section-header {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--esp-md);
     flex-wrap: wrap;
-    margin-bottom: var(--esp-lg);
+    padding: var(--esp-md) var(--esp-xl);
+    border-bottom: 1px solid var(--borde);
 }
 
 .section-title {
     font-family: var(--fuente-titulo);
-    font-size: 1.9rem;
+    font-size: 1.35rem;
     font-weight: 600;
     letter-spacing: -0.02em;
 }
@@ -487,10 +501,26 @@ img { max-width: 100%; display: block; }
 /* Rejilla densa: en vez de 3 columnas fijas, tantas como quepan a partir de
    165px. En pantalla ancha pasa de 3 a 6-7 tarjetas por fila, así que la
    portada baja a menos de la mitad de alto y el scroll se desploma. */
+/* Este es el bloque con scroll del shell: `min-height: 0` es obligatorio,
+   porque sin él un hijo flex se niega a encoger por debajo de su contenido
+   y sería el shell entero el que desbordaría. */
+.books-section {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
 .books-grid {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--esp-md) var(--esp-xl) var(--esp-lg);
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: var(--esp-md);
+    align-content: start;
 }
 
 .grid-vacio {
@@ -515,7 +545,7 @@ img { max-width: 100%; display: block; }
 
 .subtema-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: var(--esp-md);
 }
 
@@ -821,17 +851,57 @@ img { max-width: 100%; display: block; }
 /* ========================================
    Análisis: pestañas, timeline, gráficas
    ======================================== */
+/* Panel anclado al pie del shell y PLEGADO por defecto: el timeline y las
+   gráficas son consulta ocasional, la rejilla es el trabajo diario. Cerrado
+   sólo cuesta la altura de su propia pestaña. */
 .analysis-section {
-    padding: var(--esp-lg);
-    border-radius: var(--radio-lg);
-    border: 1px solid var(--borde);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--borde);
     background: var(--superficie);
 }
 
+.analysis-toggle {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--esp-sm);
+    padding: var(--esp-sm) var(--esp-xl);
+    border: none;
+    background: none;
+    color: var(--tinta-suave);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: color var(--transicion);
+}
+
+.analysis-toggle:hover { color: var(--tinta); }
+
+.analysis-toggle .chevron {
+    display: flex;
+    transition: transform var(--transicion);
+}
+
+.analysis-section.open .analysis-toggle .chevron { transform: rotate(180deg); }
+
+.analysis-body {
+    display: none;
+    flex-direction: column;
+    min-height: 0;
+    max-height: 42vh;
+    border-top: 1px solid var(--borde);
+}
+
+.analysis-section.open .analysis-body { display: flex; }
+
 .tabs {
+    flex-shrink: 0;
     display: flex;
     gap: var(--esp-lg);
-    margin-bottom: var(--esp-lg);
+    padding: 0 var(--esp-xl);
     border-bottom: 1px solid var(--borde);
 }
 
@@ -854,14 +924,20 @@ img { max-width: 100%; display: block; }
 }
 
 .tab-content { display: none; }
-.tab-content.active { display: block; }
 
-/* Timeline: cronología de lectura, del más reciente al más antiguo */
+.tab-content.active {
+    display: block;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--esp-lg) var(--esp-xl);
+}
+
+/* Timeline: cronología de lectura, del más reciente al más antiguo.
+   El scroll lo lleva ahora .tab-content, que conoce el alto real del panel;
+   un max-height fijo aquí competiría con él. */
 .timeline {
     position: relative;
     padding-left: var(--esp-lg);
-    max-height: 420px;
-    overflow-y: auto;
 }
 
 .timeline-line {
@@ -1017,19 +1093,25 @@ img { max-width: 100%; display: block; }
     backdrop-filter: blur(3px);
 }
 
+/* Cabecera fija y cuerpo con scroll propio, en vez de scrollear el modal
+   entero: el título del libro no se pierde al bajar a los comentarios. */
 .modal-content {
     position: relative;
     z-index: 1;
     width: 100%;
-    max-width: 620px;
-    max-height: 90vh;
+    max-width: 760px;
+    max-height: 88dvh;
+    display: flex;
+    flex-direction: column;
     border-radius: var(--radio-lg);
     border: 1px solid var(--borde);
     background: var(--superficie);
     box-shadow: var(--sombra);
-    overflow-y: auto;
+    overflow: hidden;
 }
 
+/* Los modales de formulario (tema y libro) siguen siendo una columna
+   estrecha y scrollean por dentro del cuerpo. */
 .modal-content-sm { max-width: 460px; }
 
 .modal-close {
@@ -1049,24 +1131,35 @@ img { max-width: 100%; display: block; }
 
 .modal-close:hover { background: var(--superficie-alta); }
 
-.modal-hero { position: relative; height: 190px; }
+/* Cabecera: portada como miniatura, no como hero.
+   El hero difuminado de 190px se comía un tercio del modal para repetir una
+   imagen que ya se vio en la tarjeta. Como miniatura identifica igual y
+   libera el alto para lo que se viene a hacer aquí. */
+.modal-cabecera {
+    flex-shrink: 0;
+    display: flex;
+    gap: var(--esp-md);
+    padding: var(--esp-lg);
+    padding-right: 3rem;         /* sitio para el botón de cerrar */
+    border-bottom: 1px solid var(--borde);
+}
 
-.modal-hero-image {
-    position: absolute;
-    inset: 0;
+.modal-portada {
+    width: 68px;
+    height: 96px;
+    flex-shrink: 0;
+    border-radius: var(--radio-sm);
+    border: 1px solid var(--borde);
+    background-color: var(--superficie-suave);
     background-size: cover;
     background-position: center;
 }
 
-.modal-hero-overlay {
-    position: absolute;
-    inset: 0;
+.modal-identidad {
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
-    gap: 0.2rem;
-    padding: var(--esp-lg);
-    background: linear-gradient(to top, var(--superficie) 6%, rgba(23, 22, 19, 0.5) 60%, transparent);
+    gap: 0.15rem;
+    min-width: 0;
 }
 
 .modal-year {
@@ -1086,14 +1179,23 @@ img { max-width: 100%; display: block; }
 .modal-meta {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--esp-sm);
+    margin-top: 0.15rem;
     font-size: 0.78rem;
     color: var(--tinta-suave);
 }
 
+/* Los campos vacíos (autor o páginas ausentes) no deben dejar huecos ni
+   separadores sueltos: se colapsan solos. */
+.modal-meta > span:empty { display: none; }
+
 .separator { opacity: 0.4; }
 
 .modal-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: var(--esp-lg);
@@ -1118,23 +1220,23 @@ img { max-width: 100%; display: block; }
     font-weight: 600;
 }
 
-.modal-reading-info {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--esp-sm);
-}
-
-.reading-stat {
+/* Progreso en una sola tira: tres datos + barra, alineados en una fila.
+   Antes eran tres tarjetas con emoji y la barra debajo, cuatro veces más
+   altas para la misma información. */
+.modal-progreso-tira {
     display: flex;
     align-items: center;
-    gap: var(--esp-sm);
-    padding: var(--esp-sm);
+    gap: var(--esp-lg);
+    padding: var(--esp-sm) var(--esp-md);
     border-radius: var(--radio-sm);
     background: var(--superficie-suave);
 }
 
-.reading-stat-icon { font-size: 0.95rem; }
-.reading-stat-content { display: flex; flex-direction: column; min-width: 0; }
+.reading-stat {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
 
 .reading-stat-label {
     font-size: 0.6rem;
@@ -1143,13 +1245,17 @@ img { max-width: 100%; display: block; }
     color: var(--tinta-tenue);
 }
 
-.reading-stat-value { font-size: 0.8rem; }
+.reading-stat-value {
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
 
 .modal-progress {
+    flex: 1;
+    min-width: 80px;
     display: flex;
     align-items: center;
     gap: var(--esp-sm);
-    margin-top: var(--esp-md);
 }
 
 .modal-progress-bar {
@@ -1196,34 +1302,70 @@ img { max-width: 100%; display: block; }
 .leyendo-btn:hover { border-color: var(--leyendo); color: var(--leyendo); }
 .leido-btn:hover { border-color: var(--leido); color: var(--leido); }
 
-.modal-editar-libro {
-    width: 100%;
+/* Dos columnas en escritorio: a la izquierda lo que se consulta (resumen,
+   estado, fechas), a la derecha lo que se escribe (comentarios). Es lo que
+   quita el scroll del modal. */
+.modal-columnas {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--esp-lg);
+    align-items: start;
+}
+
+.modal-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--esp-lg);
+    min-width: 0;
+}
+
+.modal-description {
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Las dos acciones secundarias comparten fila en vez de apilar dos botones
+   a todo el ancho. */
+.modal-acciones-secundarias {
+    display: flex;
+    gap: var(--esp-sm);
     margin-top: var(--esp-sm);
-    padding: 0.5rem;
+}
+
+.modal-editar-libro,
+.modal-toggle-advanced {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 0.45rem 0.5rem;
     border-radius: var(--radio-sm);
     border: 1px solid var(--borde);
     background: transparent;
     color: var(--tinta-tenue);
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     transition: all var(--transicion);
 }
 
-.modal-editar-libro:hover { background: var(--superficie-alta); color: var(--tinta); }
-
-.modal-toggle-advanced {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: var(--esp-sm) 0;
-    border: none;
-    background: none;
-    color: var(--tinta-suave);
-    font-size: 0.82rem;
+.modal-editar-libro:hover,
+.modal-toggle-advanced:hover {
+    background: var(--superficie-alta);
+    color: var(--tinta);
 }
 
 .modal-toggle-advanced svg { transition: transform var(--transicion); }
 .modal-toggle-advanced.active svg { transform: rotate(180deg); }
+
+.form-calculo {
+    margin-bottom: var(--esp-md);
+    font-size: 0.78rem;
+    color: var(--tinta-tenue);
+}
+
+.form-calculo span { color: var(--tinta-suave); }
 
 .modal-advanced-form { padding-top: var(--esp-sm); }
 
@@ -1286,8 +1428,11 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 
 .comentarios-container { display: flex; flex-direction: column; gap: var(--esp-sm); }
 
+/* Sin atributo rows: la altura la fija el CSS para que la caja llene la
+   columna derecha y quede a la par del bloque de la izquierda. */
 .comentarios-textarea {
     width: 100%;
+    min-height: 190px;
     padding: 0.7rem 0.85rem;
     border-radius: var(--radio-sm);
     border: 1px solid var(--borde);
@@ -1300,6 +1445,12 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 }
 
 .comentarios-textarea:focus { outline: none; border-color: var(--tema-acento); }
+
+.comentarios-pie {
+    display: flex;
+    align-items: center;
+    gap: var(--esp-sm);
+}
 
 .btn-guardar-comentarios {
     align-self: flex-start;
@@ -1455,14 +1606,16 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 /* ========================================
    Cabecera móvil
    ======================================== */
+/* Altura fija y conocida: el shell se la resta a 100dvh para no desbordar
+   (ver la media query de 768px). */
 .mobile-header {
     display: none;
-    position: sticky;
-    top: 0;
+    flex-shrink: 0;
+    height: 48px;
     z-index: 700;
     align-items: center;
     gap: var(--esp-md);
-    padding: var(--esp-sm) var(--esp-md);
+    padding: 0 var(--esp-md);
     background: var(--superficie);
     border-bottom: 1px solid var(--borde);
 }
@@ -1497,19 +1650,36 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 /* ========================================
    Responsive
    ======================================== */
+/* El padding horizontal ya no está en .main-content, sino en cada bloque
+   del shell, así que en cada corte hay que moverlos todos a la vez. */
 @media (max-width: 1024px) {
     :root { --ancho-sidebar: 250px; }
     .books-grid,
-    .subtema-grid { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); }
-    .main-content { padding: var(--esp-lg); }
+    .subtema-grid { grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); }
+
+    .section-header,
+    .books-grid,
+    .analysis-toggle,
+    .tabs,
+    .tab-content.active {
+        padding-left: var(--esp-lg);
+        padding-right: var(--esp-lg);
+    }
+
+    .modal-columnas { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
     .mobile-header { display: flex; }
 
+    /* El header móvil vive fuera de .library-layout, así que el shell sólo
+       puede ocupar el resto; si no, la suma desborda la ventana. */
+    .library-layout { height: calc(100dvh - 48px); }
+
     .sidebar {
         position: fixed;
         top: 0;
+        bottom: 0;
         left: 0;
         z-index: 850;
         width: 82vw;
@@ -1524,16 +1694,30 @@ textarea.form-input { resize: vertical; min-height: 80px; }
        era precisamente el scroll interminable que había que cortar. */
     .books-grid,
     .subtema-grid { grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); }
-    .main-content { padding: var(--esp-md); }
-    .section-title { font-size: 1.5rem; }
+
+    .section-header,
+    .books-grid,
+    .analysis-toggle,
+    .tabs,
+    .tab-content.active {
+        padding-left: var(--esp-md);
+        padding-right: var(--esp-md);
+    }
+
+    .section-title { font-size: 1.15rem; }
+    .analysis-body { max-height: 50vh; }
 
     .modal { padding: 0; align-items: flex-end; }
 
     .modal-content {
         max-width: 100%;
-        max-height: 92vh;
+        max-height: 92dvh;
         border-radius: var(--radio-lg) var(--radio-lg) 0 0;
     }
+
+    .modal-cabecera { padding: var(--esp-md); padding-right: 3rem; }
+    .modal-portada { width: 54px; height: 78px; }
+    .comentarios-textarea { min-height: 130px; }
 
     .timeline-item { grid-template-columns: 1fr auto; row-gap: 0.15rem; }
     .timeline-year { grid-column: 1 / -1; }
@@ -1545,9 +1729,18 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 }
 
 @media (max-width: 480px) {
-    .modal-reading-info { grid-template-columns: 1fr; }
     .form-row { grid-template-columns: 1fr; }
     .stats-compact { grid-template-columns: repeat(2, 1fr); }
+
+    /* La tira de progreso se parte: las tres fechas arriba, la barra debajo
+       a lo ancho, en vez de estrujarse en una fila de 320px. */
+    .modal-progreso-tira {
+        flex-wrap: wrap;
+        gap: var(--esp-md);
+    }
+
+    .modal-progress { flex-basis: 100%; }
+    .modal-acciones-secundarias { flex-direction: column; }
 }
 
 /* ========================================
@@ -1555,8 +1748,9 @@ textarea.form-input { resize: vertical; min-height: 80px; }
    ======================================== */
 .clickeable { cursor: pointer; }
 
-/* Enlace al recurso, dentro del modal de lectura */
+/* Enlace al recurso, en la cabecera del modal de lectura */
 .modal-enlace {
+    align-self: flex-start;
     display: inline-block;
     margin-top: var(--esp-sm);
     padding: 0.35rem 0.75rem;

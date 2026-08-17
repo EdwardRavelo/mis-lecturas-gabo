@@ -11,3 +11,6 @@ desktop.ini
 # Editor directories
 .vscode/settings.json
 *.log
+
+# Permisos locales de Claude Code (son de esta máquina, no del proyecto)
+.claude/settings.local.json

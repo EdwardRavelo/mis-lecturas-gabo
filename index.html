@@ -201,24 +201,36 @@
                 </div>
             </section>
 
-            <!-- Timeline y Análisis en tabs -->
-            <section class="analysis-section">
-                <div class="tabs">
-                    <button class="tab-btn active" data-tab="timeline">Timeline</button>
-                    <button class="tab-btn" data-tab="charts">Análisis</button>
-                </div>
+            <!-- Timeline y Análisis: panel plegable, cerrado por defecto -->
+            <section class="analysis-section" id="analysis-section">
+                <button class="analysis-toggle" id="analysis-toggle" type="button"
+                        aria-expanded="false" aria-controls="analysis-body">
+                    <span class="chevron">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="18 15 12 9 6 15"/>
+                        </svg>
+                    </span>
+                    Timeline y análisis
+                </button>
 
-                <div class="tab-content active" id="timeline-tab">
-                    <div class="timeline" id="timeline">
-                        <!-- El timeline se generará dinámicamente -->
+                <div class="analysis-body" id="analysis-body">
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="timeline">Timeline</button>
+                        <button class="tab-btn" data-tab="charts">Análisis</button>
                     </div>
-                </div>
 
-                <div class="tab-content" id="charts-tab">
-                    <div class="charts-grid-compact">
-                        <div class="chart-container-small">
-                            <h4 class="chart-title-small">Páginas por Mes</h4>
-                            <canvas id="pages-chart"></canvas>
+                    <div class="tab-content active" id="timeline-tab">
+                        <div class="timeline" id="timeline">
+                            <!-- El timeline se generará dinámicamente -->
+                        </div>
+                    </div>
+
+                    <div class="tab-content" id="charts-tab">
+                        <div class="charts-grid-compact">
+                            <div class="chart-container-small">
+                                <h4 class="chart-title-small">Páginas por Mes</h4>
+                                <canvas id="pages-chart"></canvas>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -236,59 +248,42 @@
                 </svg>
             </button>
 
-            <div class="modal-hero">
-                <div class="modal-hero-image" id="modal-hero-image"></div>
-                <div class="modal-hero-overlay">
+            <!-- Cabecera: portada pequeña + identificación.
+                 Sustituye al hero de 190px, que gastaba un tercio del alto
+                 en una portada difuminada. -->
+            <header class="modal-cabecera">
+                <div class="modal-portada" id="modal-hero-image"></div>
+                <div class="modal-identidad">
                     <span class="modal-year" id="modal-year"></span>
                     <h2 class="modal-title" id="modal-title"></h2>
                     <div class="modal-meta">
                         <span id="modal-autor"></span>
                         <span id="modal-pages"></span>
-                        <span class="separator">•</span>
                         <span id="modal-estado-badge"></span>
                     </div>
-                </div>
-            </div>
-
-            <div class="modal-body">
-                <input type="hidden" id="edit-index">
-
-                <!-- Descripción -->
-                <div class="modal-section">
-                    <h3 class="modal-section-title">Sobre el libro</h3>
-                    <p class="modal-description" id="modal-description"></p>
                     <a class="modal-enlace" id="modal-enlace" target="_blank" rel="noopener noreferrer" style="display:none;">
                         Abrir enlace ↗
                     </a>
                 </div>
+            </header>
 
-                <!-- Información de lectura -->
-                <div class="modal-section">
-                    <h3 class="modal-section-title">Progreso de Lectura</h3>
-                    <div class="modal-reading-info">
-                        <div class="reading-stat">
-                            <div class="reading-stat-icon">📅</div>
-                            <div class="reading-stat-content">
-                                <span class="reading-stat-label">Inicio</span>
-                                <span class="reading-stat-value" id="modal-fecha-inicio">--</span>
-                            </div>
-                        </div>
-                        <div class="reading-stat">
-                            <div class="reading-stat-icon">🏁</div>
-                            <div class="reading-stat-content">
-                                <span class="reading-stat-label">Final</span>
-                                <span class="reading-stat-value" id="modal-fecha-final">--</span>
-                            </div>
-                        </div>
-                        <div class="reading-stat">
-                            <div class="reading-stat-icon">⏱️</div>
-                            <div class="reading-stat-content">
-                                <span class="reading-stat-label">Días</span>
-                                <span class="reading-stat-value" id="modal-dias">--</span>
-                            </div>
-                        </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-index">
+
+                <!-- Progreso: las tres fechas y la barra, en una sola tira -->
+                <div class="modal-progreso-tira">
+                    <div class="reading-stat">
+                        <span class="reading-stat-label">Inicio</span>
+                        <span class="reading-stat-value" id="modal-fecha-inicio">--</span>
                     </div>
-
+                    <div class="reading-stat">
+                        <span class="reading-stat-label">Final</span>
+                        <span class="reading-stat-value" id="modal-fecha-final">--</span>
+                    </div>
+                    <div class="reading-stat">
+                        <span class="reading-stat-label">Días</span>
+                        <span class="reading-stat-value" id="modal-dias">--</span>
+                    </div>
                     <div class="modal-progress">
                         <div class="modal-progress-bar">
                             <div class="modal-progress-fill" id="modal-progress-fill"></div>
@@ -297,73 +292,82 @@
                     </div>
                 </div>
 
-                <!-- Acciones Rápidas -->
-                <div class="modal-section">
-                    <h3 class="modal-section-title">Acciones</h3>
-                    <div class="modal-action-buttons">
-                        <button class="modal-action-btn pendiente-btn" data-action="Pendiente">
-                            <span class="btn-icon">⊙</span>
-                            <span class="btn-label">Marcar Pendiente</span>
-                        </button>
-                        <button class="modal-action-btn leyendo-btn" data-action="Leyendo">
-                            <span class="btn-icon">▶</span>
-                            <span class="btn-label">Iniciar Lectura</span>
-                        </button>
-                        <button class="modal-action-btn leido-btn" data-action="Leído">
-                            <span class="btn-icon">✓</span>
-                            <span class="btn-label">Completar</span>
-                        </button>
+                <!-- Dos columnas en escritorio: consulta a la izquierda,
+                     escritura a la derecha. En móvil se apilan. -->
+                <div class="modal-columnas">
+                    <div class="modal-col">
+                        <div class="modal-section">
+                            <h3 class="modal-section-title">Sobre el libro</h3>
+                            <p class="modal-description" id="modal-description"></p>
+                        </div>
+
+                        <div class="modal-section">
+                            <h3 class="modal-section-title">Estado</h3>
+                            <div class="modal-action-buttons">
+                                <button class="modal-action-btn pendiente-btn" data-action="Pendiente" title="Marcar pendiente">
+                                    <span class="btn-icon">⊙</span>
+                                    <span class="btn-label">Pendiente</span>
+                                </button>
+                                <button class="modal-action-btn leyendo-btn" data-action="Leyendo" title="Iniciar lectura">
+                                    <span class="btn-icon">▶</span>
+                                    <span class="btn-label">Leyendo</span>
+                                </button>
+                                <button class="modal-action-btn leido-btn" data-action="Leído" title="Completar">
+                                    <span class="btn-icon">✓</span>
+                                    <span class="btn-label">Leído</span>
+                                </button>
+                            </div>
+
+                            <div class="modal-acciones-secundarias">
+                                <button class="modal-toggle-advanced" id="toggle-advanced" type="button">
+                                    <span>Editar fechas</span>
+                                    <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                    </svg>
+                                </button>
+                                <button class="modal-editar-libro" id="btn-editar-libro" type="button">
+                                    Editar datos del libro
+                                </button>
+                            </div>
+
+                            <div class="modal-advanced-form" id="advanced-form" style="display: none;">
+                                <form id="edit-form">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" for="edit-inicio">Inicio</label>
+                                            <input type="text" id="edit-inicio" class="form-input" placeholder="01/enero/2026" oninput="actualizarDiasModal()">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" for="edit-final">Final</label>
+                                            <input type="text" id="edit-final" class="form-input" placeholder="15/febrero/2026" oninput="actualizarDiasModal()">
+                                        </div>
+                                    </div>
+
+                                    <p class="form-calculo">Días calculados: <span id="edit-dias">-</span></p>
+
+                                    <button type="submit" class="btn btn-primary btn-full">Guardar fechas</button>
+                                </form>
+                            </div>
+                        </div>
                     </div>
-                    <button class="modal-editar-libro" id="btn-editar-libro" type="button">
-                        Editar datos del libro
-                    </button>
-                </div>
 
-                <!-- Fechas (colapsable) -->
-                <div class="modal-section">
-                    <button class="modal-toggle-advanced" id="toggle-advanced">
-                        <span>Editar Fechas</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
-                        </svg>
-                    </button>
-
-                    <div class="modal-advanced-form" id="advanced-form" style="display: none;">
-                        <form id="edit-form">
-                            <div class="form-group">
-                                <label class="form-label" for="edit-inicio">Fecha de Inicio</label>
-                                <input type="text" id="edit-inicio" class="form-input" placeholder="ej: 01/enero/2026" oninput="actualizarDiasModal()">
+                    <div class="modal-col">
+                        <div class="modal-section modal-section-comentarios">
+                            <h3 class="modal-section-title">Mis comentarios</h3>
+                            <div class="comentarios-container">
+                                <textarea
+                                    id="edit-comentarios"
+                                    class="comentarios-textarea"
+                                    placeholder="Anota tus pensamientos, frases favoritas, reflexiones sobre este libro..."
+                                ></textarea>
+                                <div class="comentarios-pie">
+                                    <button class="btn-guardar-comentarios" id="btn-guardar-comentarios" type="button">
+                                        Guardar comentarios
+                                    </button>
+                                    <span class="comentarios-saved" id="comentarios-saved">¡Guardado!</span>
+                                </div>
                             </div>
-
-                            <div class="form-group">
-                                <label class="form-label" for="edit-final">Fecha Final</label>
-                                <input type="text" id="edit-final" class="form-input" placeholder="ej: 15/febrero/2026" oninput="actualizarDiasModal()">
-                            </div>
-
-                            <div class="form-group">
-                                <label class="form-label">Días calculados</label>
-                                <span id="edit-dias" style="font-size:0.9rem; color: var(--accent-green, #00D9A3);">-</span>
-                            </div>
-
-                            <button type="submit" class="btn btn-primary btn-full">Guardar Fechas</button>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- Comentarios y frases del libro -->
-                <div class="modal-section">
-                    <h3 class="modal-section-title">Mis comentarios</h3>
-                    <div class="comentarios-container">
-                        <textarea
-                            id="edit-comentarios"
-                            class="comentarios-textarea"
-                            placeholder="Anota tus pensamientos, frases favoritas, reflexiones sobre este libro..."
-                            rows="5"
-                        ></textarea>
-                        <button class="btn-guardar-comentarios" id="btn-guardar-comentarios" type="button">
-                            Guardar comentarios
-                        </button>
-                        <span class="comentarios-saved" id="comentarios-saved">¡Guardado!</span>
+                        </div>
                     </div>
                 </div>
             </div>

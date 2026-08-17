@@ -629,11 +629,12 @@ function abrirModalEdicion(id) {
 
     libroEditando = id;
 
-    const hero = document.getElementById('modal-hero-image');
-    if (libro.portada) {
-        hero.style.backgroundImage = `url(${libro.portada})`;
-    } else {
-        hero.style.background = 'linear-gradient(135deg, rgba(0, 217, 163, 0.2), rgba(255, 107, 157, 0.2))';
+    // Se asigna siempre, también el 'none': si no, la portada del libro
+    // anterior se queda pegada al abrir uno que no tiene. El fondo del hueco
+    // lo pone el CSS, no un degradado a mano.
+    const portada = document.getElementById('modal-hero-image');
+    if (portada) {
+        portada.style.backgroundImage = libro.portada ? `url(${libro.portada})` : 'none';
     }
 
     const poner = (id, valor) => {
@@ -1087,6 +1088,21 @@ function inicializarEventListeners() {
         });
     }
 
+    // Panel de análisis: plegado por defecto para que no le quite pantalla
+    // a la rejilla, que es lo que se mira a diario.
+    const analysisSection = document.getElementById('analysis-section');
+    const analysisToggle = document.getElementById('analysis-toggle');
+
+    if (analysisSection && analysisToggle) {
+        analysisToggle.addEventListener('click', () => {
+            const abierto = analysisSection.classList.toggle('open');
+            analysisToggle.setAttribute('aria-expanded', String(abierto));
+            // Chart.js mide el contenedor al construir la gráfica, y oculto
+            // mide 0: hay que rehacerla al abrir.
+            if (abierto) initCharts(librosDelTema());
+        });
+    }
+
     // Tabs de análisis
     const tabBtns = document.querySelectorAll('.tab-btn');
     tabBtns.forEach(btn => {
@@ -1095,6 +1111,8 @@ function inicializarEventListeners() {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById(btn.dataset.tab + '-tab')?.classList.add('active');
+            // Mismo motivo que arriba: la pestaña oculta medía 0.
+            if (btn.dataset.tab === 'charts') initCharts(librosDelTema());
         });
     });
 
