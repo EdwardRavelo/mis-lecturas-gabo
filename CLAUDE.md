@@ -163,12 +163,15 @@ Breakpoints: >1024px full shell, ≤1024px narrower sidebar and single-column mo
 
 ## Visualisations
 
-Two pieces, each with the form its data calls for (`charts.js` documents the reasoning):
+Three pieces, each with the form its data calls for (`charts.js` documents the reasoning):
 
-- **Reparto por estado** — part-to-whole → **stacked bar in plain HTML**, not a doughnut: a ring forces angle comparison and wastes a narrow column. Legend always carries name *and* value, so identity never depends on colour alone.
-- **Páginas por mes** — magnitude over time → Chart.js bars, one series and therefore one colour.
+- **Reparto por estado** (sidebar) — part-to-whole → **stacked bar in plain HTML**, not a doughnut: a ring forces angle comparison and wastes a narrow column. Legend always carries name *and* value, so identity never depends on colour alone.
+- **Progreso por tema** — the same shape repeated per category → horizontal stacked bars, also plain HTML. Scoped to **all** books and themes, not to the current one, since its job is comparing themes against each other.
+- **Páginas por mes** — magnitude over time → Chart.js bars, one series and therefore one colour. Its canvas must stay inside `.chart-caja`, which has a **fixed height**: with an auto-height container and `maintainAspectRatio: false`, the canvas grows the container, the ResizeObserver fires, and the chart grows without end.
 
-Both are scoped to `librosDelTema()`, not to all books. When there is nothing to show they say so, instead of drawing an empty chart with a fake "Sin datos" label.
+**Know the data's coverage before adding a view here.** Most of the catalogue was loaded from a spreadsheet by `supabase-schema-v3.sql`, whose INSERT lists neither `final` nor `paginas`. So most finished readings have no end date and no page count, and any time-based or page-based view silently drops them — which is why "Progreso por tema" exists and why `createPagesChart()` prints a `.nota-datos` line stating how many finished readings it could not place. A chart that quietly shows two of nine entries is worse than no chart.
+
+For the same reason `renderizarTimeline()` lists readings that are started or finished **without** dates in a separate "Sin fecha registrada" block, with hollow dots and no timeline rule: they are real readings but not milestones, and hiding them made the diary lie by omission.
 
 ## Rendering
 

@@ -359,7 +359,7 @@ function actualizarInterfaz() {
     renderizarLibros();
     actualizarEstadisticas();
     renderizarTimeline();
-    initCharts(librosDelTema());
+    initCharts(librosDelTema(), temas, libros);
     actualizarTituloSeccion();
     cargarTodasLasPortadas();
 }
@@ -575,41 +575,73 @@ function calcularPromedioDias() {
 
 // Cronología de LECTURA, no de publicación: es lo que convierte la app en
 // un diario. Los pendientes sin fecha no aparecen porque no son un hito.
+function claseEstado(estado) {
+    return estado === 'Leído' ? 'leido'
+         : estado === 'Leyendo' ? 'leyendo'
+         : 'pendiente';
+}
+
 function renderizarTimeline() {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
 
-    const conFecha = librosDelTema()
+    const delTema = librosDelTema();
+
+    const conFecha = delTema
         .filter(l => l.inicio || l.final)
         .map(l => ({ libro: l, fecha: parseFechaEspañol(l.final || l.inicio) }))
         .filter(x => x.fecha)
         .sort((a, b) => b.fecha - a.fecha);
 
-    if (!conFecha.length) {
+    // Lo empezado o terminado SIN fecha. Filtrarlo hacía que el timeline
+    // mintiera por omisión: hoy la mayoría de las lecturas terminadas no
+    // tienen fecha (se cargaron desde la hoja de cálculo sin ella), así que
+    // el diario mostraba dos entradas y escondía el resto.
+    const sinFecha = delTema
+        .filter(l => l.estado !== 'Pendiente' && !l.inicio && !l.final)
+        .sort((a, b) => a.titulo.localeCompare(b.titulo, 'es'));
+
+    if (!conFecha.length && !sinFecha.length) {
         // Sin la línea: una raya vertical al lado de un aviso, sin un solo
         // hito que sostener, no significa nada.
-        timeline.innerHTML = '<p class="grid-vacio">Aún no hay lecturas con fecha.</p>';
+        timeline.innerHTML = '<p class="grid-vacio">Aún no has empezado ninguna lectura.</p>';
         return;
     }
 
-    timeline.innerHTML = '<div class="timeline-line"></div>';
+    timeline.innerHTML = conFecha.length ? '<div class="timeline-line"></div>' : '';
 
-    conFecha.forEach(({ libro, fecha }) => {
-        const clase = libro.estado === 'Leído' ? 'leido'
-                    : libro.estado === 'Leyendo' ? 'leyendo'
-                    : 'pendiente';
+    const crearItem = (libro, etiquetaFecha) => {
+        const clase = claseEstado(libro.estado);
 
         const item = document.createElement('div');
         item.className = `timeline-item ${clase}`;
         item.innerHTML = `
             <div class="timeline-dot ${clase}"></div>
-            <div class="timeline-year">${formatearFechaEspañol(fecha)}</div>
+            <div class="timeline-year">${etiquetaFecha}</div>
             <div class="timeline-title">${escaparHtml(libro.titulo)}</div>
             <span class="timeline-status ${clase}">${libro.estado}</span>
         `;
         item.addEventListener('click', () => abrirModalEdicion(libro.id));
-        timeline.appendChild(item);
+        return item;
+    };
+
+    conFecha.forEach(({ libro, fecha }) => {
+        timeline.appendChild(crearItem(libro, formatearFechaEspañol(fecha)));
     });
+
+    if (!sinFecha.length) return;
+
+    // Bloque aparte, no mezclado: son lecturas reales, pero no son hitos —
+    // no se pueden ordenar en el tiempo y no deben fingir que sí.
+    const separador = document.createElement('p');
+    separador.className = 'timeline-separador';
+    separador.textContent = `Sin fecha registrada (${sinFecha.length})`;
+    timeline.appendChild(separador);
+
+    const grupo = document.createElement('div');
+    grupo.className = 'timeline-sin-fecha';
+    sinFecha.forEach(libro => grupo.appendChild(crearItem(libro, '—')));
+    timeline.appendChild(grupo);
 }
 
 function escaparHtml(texto) {
@@ -1103,7 +1135,7 @@ function inicializarEventListeners() {
             analysisToggle.setAttribute('aria-expanded', String(abierto));
             // Chart.js mide el contenedor al construir la gráfica, y oculto
             // mide 0: hay que rehacerla al abrir.
-            if (abierto) initCharts(librosDelTema());
+            if (abierto) initCharts(librosDelTema(), temas, libros);
         });
     }
 
@@ -1116,7 +1148,7 @@ function inicializarEventListeners() {
             btn.classList.add('active');
             document.getElementById(btn.dataset.tab + '-tab')?.classList.add('active');
             // Mismo motivo que arriba: la pestaña oculta medía 0.
-            if (btn.dataset.tab === 'charts') initCharts(librosDelTema());
+            if (btn.dataset.tab === 'charts') initCharts(librosDelTema(), temas, libros);
         });
     });
 

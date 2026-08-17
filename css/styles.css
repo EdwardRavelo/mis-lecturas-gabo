@@ -1027,6 +1027,31 @@ img { max-width: 100%; display: block; }
 .timeline-status.leyendo { background: var(--leyendo-wash); color: var(--leyendo); }
 .timeline-status.pendiente { background: var(--pendiente-wash); color: var(--pendiente); }
 
+/* Lecturas sin fecha: van al final, separadas, porque son reales pero no
+   son hitos — no se pueden ordenar en el tiempo. */
+.timeline-separador {
+    margin: var(--esp-md) 0 var(--esp-xs);
+    padding-top: var(--esp-md);
+    border-top: 1px solid var(--borde);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+}
+
+/* Aquí no hay línea de tiempo detrás, así que el punto se vacía: relleno
+   sólido insinuaría una posición en el eje que no existe. */
+.timeline-sin-fecha .timeline-dot {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--borde-fuerte);
+}
+
+.timeline-sin-fecha .timeline-year {
+    color: var(--tinta-tenue);
+    opacity: 0.55;
+}
+
 /* Gráficas */
 .chart-mini-title,
 .chart-title-small {
@@ -1052,7 +1077,75 @@ img { max-width: 100%; display: block; }
     height: 210px;
 }
 
-.charts-grid-compact { display: grid; gap: var(--esp-lg); }
+.charts-grid-compact {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--esp-xl);
+    align-items: start;
+}
+
+/* Aviso de cobertura de datos: cuántas lecturas no puede mostrar la gráfica.
+   No es decoración — sin él, dos barras parecen todo el historial. */
+.nota-datos {
+    margin-top: var(--esp-sm);
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: var(--tinta-tenue);
+}
+
+/* ----------------------------------------
+   Progreso por tema — barras apiladas horizontales
+   ---------------------------------------- */
+.progreso-temas {
+    display: flex;
+    flex-direction: column;
+    gap: var(--esp-sm);
+}
+
+.progreso-fila {
+    display: grid;
+    grid-template-columns: minmax(0, 7rem) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--esp-sm);
+}
+
+.progreso-nombre {
+    font-size: 0.78rem;
+    color: var(--tinta-suave);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.progreso-barra {
+    display: flex;
+    gap: 2px;                 /* hueco de superficie entre segmentos */
+    height: 12px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: var(--superficie-suave);
+}
+
+.progreso-seg { min-width: 2px; }
+
+.progreso-valor {
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--tinta-tenue);
+    white-space: nowrap;
+}
+
+/* Dos clases a propósito: .estado-leyenda se declara más abajo con la misma
+   especificidad y, al ir después, ganaría la cascada. */
+.estado-leyenda.progreso-leyenda {
+    margin-top: var(--esp-md);
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--esp-md);
+}
+
+/* En horizontal el nombre no debe estirarse para llenar la fila */
+.progreso-leyenda .estado-leyenda-nombre { flex: 0 0 auto; }
 
 /* ========================================
    Barra apilada de estados (sidebar)

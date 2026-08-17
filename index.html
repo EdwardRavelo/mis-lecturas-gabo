@@ -229,6 +229,15 @@
 
                     <div class="tab-content" id="charts-tab">
                         <div class="charts-grid-compact">
+                            <!-- Progreso por tema: usa estado y tema, los dos
+                                 únicos campos que TODAS las lecturas tienen.
+                                 Las vistas temporales dependen de fechas que
+                                 la mayoría del catálogo no trae. -->
+                            <div class="chart-container-small">
+                                <h4 class="chart-title-small">Progreso por tema</h4>
+                                <div id="temas-chart"></div>
+                            </div>
+
                             <div class="chart-container-small">
                                 <h4 class="chart-title-small">Páginas por Mes</h4>
                                 <!-- La caja da al canvas una altura FIJA. Sin ella,
