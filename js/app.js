@@ -803,7 +803,9 @@ function abrirModalTema(id = null) {
 
     document.getElementById('tema-modal-titulo').textContent = tema ? 'Editar tema' : 'Nuevo tema';
     document.getElementById('tema-nombre').value = tema?.nombre || '';
-    document.getElementById('tema-color').value = tema?.color || '#00D9A3';
+    // Por defecto, el mismo acento que --tema-acento en :root (ámbar). El
+    // verde neón que había aquí era de la paleta anterior.
+    document.getElementById('tema-color').value = tema?.color || '#B57C00';
     document.getElementById('tema-id').value = id || '';
 
     const btnBorrar = document.getElementById('btn-borrar-tema');

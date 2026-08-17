@@ -1822,24 +1822,30 @@ textarea.form-input { resize: vertical; min-height: 80px; }
    saber en qué estado está cada entrada. Con la fila teñida el estado se lee
    recorriendo la lista con la vista, sin fijarse en nada.
 
-   Se usa un tinte, no el color pleno: sobre el fondo #100F0D un relleno
-   saturado dejaría el texto ilegible. A 0.28 el peor contraste del texto es
-   11.1:1, muy por encima del 4.5:1 que pide WCAG — hay margen hasta ~0.50
-   antes de acercarse a algo problemático.
+   Se usa un tinte, no el color pleno: un relleno saturado dejaría el texto
+   ilegible. Sobre papel bastan alfas mucho más bajas que sobre el fondo
+   oscuro anterior (allí eran 0.28/0.42), porque aquí el tinte OSCURECE la
+   fila en vez de aclararla. A 0.24 el peor contraste del texto —tinta sobre
+   leído o sobre pendiente, compuestos sobre --plano— es 11.7:1, muy por
+   encima del 4.5:1 que pide WCAG.
+
+   Los tripletes son los mismos hex de :root descompuestos en RGB, porque
+   rgba() necesita canales sueltos para variar la opacidad. Si cambian los
+   colores de estado, hay que cambiarlos también aquí.
 
    El color va en una variable por estado para no pelearme por especificidad
    con la regla de :hover, que tiene el mismo peso. */
 .books-grid.view-list .book-card {
-    --fila-tinte: 245, 241, 232;   /* respaldo si no hubiera clase de estado */
-    background: rgba(var(--fila-tinte), 0.28);
+    --fila-tinte: 28, 24, 21;      /* tinta: respaldo si no hubiera estado */
+    background: rgba(var(--fila-tinte), 0.15);
 }
 
-.books-grid.view-list .book-card.estado-leido     { --fila-tinte: 25, 158, 112; }
-.books-grid.view-list .book-card.estado-leyendo   { --fila-tinte: 201, 133, 0; }
-.books-grid.view-list .book-card.estado-pendiente { --fila-tinte: 144, 133, 233; }
+.books-grid.view-list .book-card.estado-leido     { --fila-tinte: 0, 117, 81; }
+.books-grid.view-list .book-card.estado-leyendo   { --fila-tinte: 181, 124, 0; }
+.books-grid.view-list .book-card.estado-pendiente { --fila-tinte: 106, 79, 199; }
 
 .books-grid.view-list .book-card:hover {
-    background: rgba(var(--fila-tinte), 0.42);
+    background: rgba(var(--fila-tinte), 0.24);
 }
 
 /* La marca lateral sobra cuando toda la fila lleva el color */
