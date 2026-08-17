@@ -4,7 +4,10 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const raiz = process.argv[2] || process.cwd();
+// Se resuelve a absoluta: la comprobación anti-escape de más abajo compara
+// contra path.resolve(raiz), así que una raíz relativa como "." producía
+// rutas relativas que nunca casaban y devolvían 403 para todo.
+const raiz = path.resolve(process.argv[2] || process.cwd());
 const puerto = parseInt(process.argv[3] || '8000', 10);
 
 const tipos = {
