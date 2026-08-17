@@ -1554,6 +1554,138 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 
 .btn-peligro:hover { background: var(--peligro-wash); border-color: var(--peligro); }
 
+/* ========================================
+   Alta de varias lecturas — tabla editable
+   ======================================== */
+.lote-ayuda {
+    margin-bottom: var(--esp-md);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--tinta-suave);
+}
+
+.lote-ayuda kbd {
+    padding: 0.05rem 0.3rem;
+    border: 1px solid var(--borde);
+    border-radius: 3px;
+    background: var(--superficie-alta);
+    font-family: var(--fuente-texto);
+    font-size: 0.72rem;
+}
+
+/* Las columnas suman más que el ancho del modal en pantallas estrechas:
+   scrollea la tabla, nunca la página. */
+.lote-tabla-envoltorio {
+    overflow-x: auto;
+    border: 1px solid var(--borde);
+    border-radius: var(--radio-sm);
+}
+
+.lote-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.lote-tabla th {
+    padding: var(--esp-xs) var(--esp-sm);
+    text-align: left;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+    background: var(--superficie-alta);
+    border-bottom: 1px solid var(--borde);
+    white-space: nowrap;
+}
+
+.lote-col-titulo { min-width: 180px; }
+.lote-col-autor  { min-width: 130px; }
+.lote-col-tipo   { min-width: 110px; }
+.lote-col-enlace { min-width: 150px; }
+.lote-col-num    { width: 72px; }
+.lote-col-x      { width: 34px; }
+
+.lote-tabla td {
+    padding: 0;
+    border-bottom: 1px solid var(--borde);
+}
+
+.lote-tabla tr:last-child td { border-bottom: none; }
+
+/* Sin bordes propios: la rejilla de la tabla ya separa las celdas, y un
+   recuadro por casilla convierte la tabla en un muro de cajas. */
+.lote-input {
+    width: 100%;
+    padding: 0.45rem var(--esp-sm);
+    border: none;
+    background: transparent;
+    color: var(--tinta);
+    font-size: 0.82rem;
+}
+
+.lote-input:focus {
+    outline: 2px solid var(--tema-acento);
+    outline-offset: -2px;
+    background: var(--superficie-alta);
+}
+
+/* Quita las flechas de los campos numéricos: roban ancho y aquí se escribe
+   con el teclado. */
+.lote-input[type="number"] { -moz-appearance: textfield; }
+.lote-input[type="number"]::-webkit-outer-spin-button,
+.lote-input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Fila cuyo título ya existe: se avisa antes de crear, no después */
+.lote-repetida { background: var(--leyendo-wash); }
+
+.lote-repetida .lote-input[data-campo="titulo"] {
+    color: var(--leyendo);
+    text-decoration: line-through;
+}
+
+.lote-quitar {
+    width: 100%;
+    padding: 0.35rem;
+    border: none;
+    background: none;
+    color: var(--tinta-tenue);
+    font-size: 1rem;
+    line-height: 1;
+    transition: color var(--transicion);
+}
+
+.lote-quitar:hover { color: var(--peligro); }
+
+.lote-pie {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--esp-md);
+    margin-top: var(--esp-md);
+}
+
+.lote-resumen {
+    font-size: 0.8rem;
+    color: var(--tinta-suave);
+}
+
+/* Visible solo para lectores de pantalla */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .comentarios-container { display: flex; flex-direction: column; gap: var(--esp-sm); }
 
 /* Sin atributo rows: la altura la fija el CSS para que la caja llene la

@@ -281,36 +281,81 @@ function actualizarDiasEnProceso() {
 // ========================================
 // Portadas (Google Books)
 // ========================================
+// La API se llama SIN clave, y para un proyecto anónimo Google da cuota
+// cero: responde 429 a todo. El código anterior no se enteraba, porque un
+// 429 no lanza — fetch resuelve, .json() parsea el objeto de error y
+// `datos.items` sale undefined, así que devolvía null como si el libro no
+// existiera. Resultado: ninguna portada, ni un aviso, y 112 peticiones en
+// paralelo repetidas en cada refresco de la interfaz.
+//
+// Ahora falla en voz alta y se calla para el resto de la sesión.
+let portadasDesactivadas = false;
+
+function desactivarPortadas(motivo) {
+    if (portadasDesactivadas) return;
+    portadasDesactivadas = true;
+    console.warn(`[Portadas] ${motivo} No se piden más portadas en esta sesión.`);
+}
+
 async function obtenerPortada(titulo, autor) {
+    if (portadasDesactivadas) return null;
+
     try {
         const partes = [`intitle:${titulo}`];
         if (autor) partes.push(`inauthor:${autor}`);
         const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(partes.join(' '))}&maxResults=1`;
 
         const respuesta = await fetch(url);
-        const datos = await respuesta.json();
 
+        if (!respuesta.ok) {
+            desactivarPortadas(
+                respuesta.status === 429
+                    ? 'Google Books devolvió 429: la API sin clave tiene cuota cero. Hace falta una API key propia para que funcionen.'
+                    : `Google Books devolvió ${respuesta.status}.`
+            );
+            return null;
+        }
+
+        const datos = await respuesta.json();
         const imagenes = datos.items?.[0]?.volumeInfo?.imageLinks;
         return imagenes ? (imagenes.thumbnail || imagenes.smallThumbnail || null) : null;
     } catch (error) {
-        console.error(`Error al obtener portada para "${titulo}":`, error);
+        // Un fallo de red tumba la tanda entera: no tiene sentido insistir
+        // libro por libro.
+        desactivarPortadas(`No se pudo contactar con Google Books (${error.message}).`);
         return null;
     }
 }
 
+// De cinco en cinco, no las 112 de golpe: así un rechazo corta la tanda en
+// la primera hornada en vez de disparar cien peticiones condenadas.
+const PORTADAS_POR_TANDA = 5;
+
 async function cargarTodasLasPortadas() {
+    if (portadasDesactivadas) return;
+
     const pendientes = libros.filter(l => !l.portada);
     if (!pendientes.length) return;
 
-    await Promise.all(pendientes.map(async libro => {
-        const portada = await obtenerPortada(libro.titulo, libro.autor);
-        if (portada) {
-            libro.portada = portada;
-            if (puedeEditarCatalogo() && libro.id) {
-                await actualizarLibroDB(libro.id, { portada });
+    let encontradas = 0;
+
+    for (let i = 0; i < pendientes.length; i += PORTADAS_POR_TANDA) {
+        if (portadasDesactivadas) break;
+
+        const tanda = pendientes.slice(i, i + PORTADAS_POR_TANDA);
+        await Promise.all(tanda.map(async libro => {
+            const portada = await obtenerPortada(libro.titulo, libro.autor);
+            if (portada) {
+                libro.portada = portada;
+                encontradas++;
+                if (puedeEditarCatalogo() && libro.id) {
+                    await actualizarLibroDB(libro.id, { portada });
+                }
             }
-        }
-    }));
+        }));
+    }
+
+    if (!encontradas) return;
 
     escribirCacheLocal();
     renderizarLibros();
@@ -1044,6 +1089,181 @@ async function borrarLibro() {
 }
 
 // ========================================
+// Alta de varias lecturas (tabla editable)
+// ========================================
+// Sustituye a la hoja de cálculo: se escriben las filas aquí y se crean
+// todas de un viaje con crearLibrosDB(), que ya existía en db.js sin que
+// nadie la llamara.
+
+const LOTE_COLUMNAS = ['titulo', 'autor', 'tipo', 'año', 'paginas', 'enlace'];
+const LOTE_FILAS_INICIALES = 4;
+
+function normalizarTitulo(texto) {
+    return String(texto ?? '').trim().toLowerCase();
+}
+
+function abrirModalLote() {
+    if (!puedeEditarCatalogo()) {
+        alert('Necesitas iniciar sesión para añadir lecturas.');
+        return;
+    }
+
+    const selector = document.getElementById('lote-tema');
+    selector.innerHTML = '<option value="">Sin tema</option>';
+    temas.forEach(t => {
+        const opcion = document.createElement('option');
+        opcion.value = t.id;
+        opcion.textContent = t.nombre;
+        selector.appendChild(opcion);
+    });
+    // Hereda el tema que estás mirando: es casi siempre el destino.
+    selector.value = (temaActual && temaActual !== 'sin-tema') ? temaActual : '';
+
+    document.getElementById('lote-subtema').value = '';
+
+    // Sugerencias de subtema con los que ya existen, para no acabar con
+    // "Básico" y "basico" como dos grupos distintos.
+    const sugerencias = document.getElementById('subtemas-existentes');
+    if (sugerencias) {
+        const usados = [...new Set(libros.map(l => l.subtema).filter(Boolean))].sort();
+        sugerencias.innerHTML = usados.map(s => `<option value="${escaparHtml(s)}"></option>`).join('');
+    }
+
+    const cuerpo = document.getElementById('lote-filas');
+    cuerpo.innerHTML = '';
+    for (let i = 0; i < LOTE_FILAS_INICIALES; i++) cuerpo.appendChild(crearFilaLote());
+
+    actualizarResumenLote();
+
+    document.getElementById('lote-modal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+    cuerpo.querySelector('input')?.focus();
+}
+
+function cerrarModalLote() {
+    document.getElementById('lote-modal').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function crearFilaLote() {
+    const fila = document.createElement('tr');
+
+    fila.innerHTML = LOTE_COLUMNAS.map(campo => {
+        const numero = campo === 'año' || campo === 'paginas';
+        const lista = campo === 'tipo' ? ' list="tipos-existentes"' : '';
+        return `<td><input type="${numero ? 'number' : 'text'}" class="lote-input"
+                          data-campo="${campo}"${lista}
+                          ${numero ? 'min="0"' : ''}></td>`;
+    }).join('') +
+    `<td><button type="button" class="lote-quitar" title="Quitar fila" aria-label="Quitar fila">×</button></td>`;
+
+    fila.querySelector('.lote-quitar').addEventListener('click', () => {
+        fila.remove();
+        // Nunca dejar la tabla sin una fila donde escribir.
+        const cuerpo = document.getElementById('lote-filas');
+        if (!cuerpo.children.length) cuerpo.appendChild(crearFilaLote());
+        actualizarResumenLote();
+    });
+
+    return fila;
+}
+
+function leerFilasLote() {
+    return [...document.querySelectorAll('#lote-filas tr')].map(fila => {
+        const datos = {};
+        fila.querySelectorAll('.lote-input').forEach(input => {
+            const valor = input.value.trim();
+            if (valor) datos[input.dataset.campo] = valor;
+        });
+        return { fila, datos };
+    });
+}
+
+function actualizarResumenLote() {
+    const resumen = document.getElementById('lote-resumen');
+    const boton = document.getElementById('btn-crear-lote');
+    if (!resumen || !boton) return;
+
+    const existentes = new Set(libros.map(l => normalizarTitulo(l.titulo)));
+    const vistos = new Set();
+    let nuevas = 0;
+    let repetidas = 0;
+
+    leerFilasLote().forEach(({ fila, datos }) => {
+        const titulo = normalizarTitulo(datos.titulo);
+        // Una fila sin título no cuenta ni estorba: es sitio para escribir.
+        if (!titulo) {
+            fila.classList.remove('lote-repetida');
+            return;
+        }
+
+        const duplicada = existentes.has(titulo) || vistos.has(titulo);
+        fila.classList.toggle('lote-repetida', duplicada);
+
+        if (duplicada) repetidas++;
+        else { nuevas++; vistos.add(titulo); }
+    });
+
+    const partes = [];
+    if (nuevas) partes.push(`${nuevas} ${nuevas === 1 ? 'nueva' : 'nuevas'}`);
+    if (repetidas) partes.push(`${repetidas} ya ${repetidas === 1 ? 'existe' : 'existen'} y se ${repetidas === 1 ? 'omitirá' : 'omitirán'}`);
+
+    resumen.textContent = partes.join(' · ') || 'Escribe al menos un título.';
+    boton.disabled = nuevas === 0;
+    boton.textContent = nuevas ? `Crear ${nuevas}` : 'Crear';
+}
+
+async function crearLoteLecturas() {
+    const temaId = document.getElementById('lote-tema').value || null;
+    const subtema = document.getElementById('lote-subtema').value.trim() || null;
+
+    const existentes = new Set(libros.map(l => normalizarTitulo(l.titulo)));
+    const vistos = new Set();
+    const nuevos = [];
+
+    leerFilasLote().forEach(({ datos }) => {
+        const titulo = normalizarTitulo(datos.titulo);
+        if (!titulo || existentes.has(titulo) || vistos.has(titulo)) return;
+        vistos.add(titulo);
+
+        const anio = parseInt(datos.año, 10);
+        const paginas = parseInt(datos.paginas, 10);
+
+        nuevos.push({
+            titulo: datos.titulo.trim(),
+            autor: datos.autor ?? null,
+            tipo: datos.tipo ?? null,
+            enlace: datos.enlace ?? null,
+            año: Number.isNaN(anio) ? null : anio,
+            paginas: Number.isNaN(paginas) ? null : paginas,
+            tema_id: temaId,
+            subtema,
+            estado: 'Pendiente',
+            orden: libros.length + nuevos.length
+        });
+    });
+
+    if (!nuevos.length) return;
+
+    const boton = document.getElementById('btn-crear-lote');
+    boton.disabled = true;
+    boton.textContent = 'Creando…';
+
+    const creados = await crearLibrosDB(nuevos);
+
+    if (!creados) {
+        alert('No se pudieron crear las lecturas. Se conservan en la tabla para reintentar.');
+        actualizarResumenLote();
+        return;
+    }
+
+    libros.push(...creados);
+    escribirCacheLocal();
+    cerrarModalLote();
+    actualizarInterfaz();
+}
+
+// ========================================
 // Filtros por estado
 // ========================================
 function aplicarFiltro(filtro) {
@@ -1171,6 +1391,64 @@ function inicializarEventListeners() {
     document.getElementById('tema-form')?.addEventListener('submit', guardarTema);
     document.getElementById('btn-borrar-tema')?.addEventListener('click', borrarTema);
 
+    // Alta de varias lecturas
+    document.getElementById('btn-nuevas-lecturas')?.addEventListener('click', abrirModalLote);
+    document.getElementById('lote-modal-close')?.addEventListener('click', cerrarModalLote);
+    document.getElementById('lote-modal-backdrop')?.addEventListener('click', cerrarModalLote);
+    document.getElementById('btn-crear-lote')?.addEventListener('click', crearLoteLecturas);
+
+    const cuerpoLote = document.getElementById('lote-filas');
+    if (cuerpoLote) {
+        // Delegación: las filas nacen y mueren, los listeners no.
+        cuerpoLote.addEventListener('input', actualizarResumenLote);
+
+        cuerpoLote.addEventListener('keydown', e => {
+            if (e.key !== 'Enter' || !e.target.classList.contains('lote-input')) return;
+            e.preventDefault();
+
+            const filaActual = e.target.closest('tr');
+            const siguiente = filaActual.nextElementSibling
+                || cuerpoLote.appendChild(crearFilaLote());
+
+            // Al bajar se mantiene la columna: se está rellenando una tabla,
+            // no un formulario.
+            const columna = e.target.dataset.campo;
+            siguiente.querySelector(`[data-campo="${columna}"]`)?.focus();
+            actualizarResumenLote();
+        });
+
+        // Pegar varias celdas de golpe reparte el texto por la tabla en vez
+        // de meterlo entero en una casilla.
+        cuerpoLote.addEventListener('paste', e => {
+            const texto = e.clipboardData?.getData('text/plain') ?? '';
+            if (!texto.includes('\t') && !texto.includes('\n')) return;
+
+            e.preventDefault();
+
+            const filas = texto.split(/\r?\n/).filter(l => l.trim());
+            const filaInicio = e.target.closest('tr');
+            const columnaInicio = LOTE_COLUMNAS.indexOf(e.target.dataset.campo);
+
+            let destino = filaInicio;
+            filas.forEach((linea, i) => {
+                if (!destino) destino = cuerpoLote.appendChild(crearFilaLote());
+
+                linea.split('\t').forEach((celda, j) => {
+                    const campo = LOTE_COLUMNAS[columnaInicio + j];
+                    if (!campo) return;
+                    const input = destino.querySelector(`[data-campo="${campo}"]`);
+                    if (input) input.value = celda.trim();
+                });
+
+                destino = i < filas.length - 1
+                    ? (destino.nextElementSibling || cuerpoLote.appendChild(crearFilaLote()))
+                    : destino;
+            });
+
+            actualizarResumenLote();
+        });
+    }
+
     // CRUD de libros
     document.getElementById('btn-nuevo-libro')?.addEventListener('click', () => abrirModalLibro(null));
     document.getElementById('libro-modal-close')?.addEventListener('click', cerrarModalLibro);
@@ -1195,6 +1473,7 @@ function inicializarEventListeners() {
     // Escape cierra lo que esté abierto
     document.addEventListener('keydown', e => {
         if (e.key !== 'Escape') return;
+        if (document.getElementById('lote-modal')?.classList.contains('active')) return cerrarModalLote();
         if (document.getElementById('libro-modal')?.classList.contains('active')) return cerrarModalLibro();
         if (document.getElementById('tema-modal')?.classList.contains('active')) return cerrarModalTema();
         if (document.getElementById('edit-modal')?.classList.contains('active')) return cerrarModal();

@@ -193,6 +193,7 @@
                 <div class="section-header">
                     <h2 class="section-title" id="section-title" data-text="Todas mis lecturas">Todas mis lecturas</h2>
                     <div class="view-options">
+                        <button class="btn-nuevo-libro" id="btn-nuevas-lecturas" title="Añadir varias lecturas en una tabla">+ Varias</button>
                         <button class="btn-nuevo-libro" id="btn-nuevo-libro" title="Añadir libro">+ Libro</button>
                         <button class="view-btn active" data-view="grid">⊞</button>
                         <button class="view-btn" data-view="list">☰</button>
@@ -505,6 +506,62 @@
                     <button type="submit" class="btn btn-primary btn-full">Guardar libro</button>
                     <button type="button" class="btn btn-peligro btn-full" id="btn-borrar-libro">Borrar libro</button>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================ -->
+    <!-- Modal: alta de varias lecturas   -->
+    <!-- ================================ -->
+    <div class="modal modal-form" id="lote-modal">
+        <div class="modal-backdrop" id="lote-modal-backdrop"></div>
+        <div class="modal-content">
+            <button class="modal-close" id="lote-modal-close" type="button" aria-label="Cerrar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+
+            <div class="modal-body">
+                <h3 class="modal-form-title">Añadir lecturas</h3>
+                <p class="lote-ayuda">
+                    Escribe una por fila. <kbd>Tab</kbd> pasa de celda, <kbd>Enter</kbd> añade fila.
+                    Solo el título es obligatorio; el resto lo puedes completar después.
+                </p>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="lote-tema">Tema</label>
+                        <select id="lote-tema" class="form-input"></select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="lote-subtema">Subtema para todas</label>
+                        <input type="text" id="lote-subtema" class="form-input"
+                               list="subtemas-existentes" placeholder="opcional">
+                    </div>
+                </div>
+
+                <div class="lote-tabla-envoltorio">
+                    <table class="lote-tabla">
+                        <thead>
+                            <tr>
+                                <th class="lote-col-titulo">Título</th>
+                                <th class="lote-col-autor">Autor</th>
+                                <th class="lote-col-tipo">Tipo</th>
+                                <th class="lote-col-num">Año</th>
+                                <th class="lote-col-num">Págs</th>
+                                <th class="lote-col-enlace">Enlace</th>
+                                <th class="lote-col-x"><span class="sr-only">Quitar</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="lote-filas"></tbody>
+                    </table>
+                </div>
+
+                <div class="lote-pie">
+                    <p class="lote-resumen" id="lote-resumen"></p>
+                    <button type="button" class="btn btn-primary" id="btn-crear-lote" disabled>Crear</button>
+                </div>
             </div>
         </div>
     </div>
