@@ -76,7 +76,7 @@ Internamente la base guarda `DATE` en ISO y la traducción ocurre en un único p
 
 JavaScript puro, sin framework y sin paso de compilación. Chart.js por CDN para la gráfica de barras, Supabase para persistencia y autenticación, y la API de Google Books para las portadas.
 
-El diseño es un sistema propio, *"Cuaderno nocturno"*: carbón cálido y tinta color papel. Los tres colores de estado están validados para contraste y daltonismo; si los tocás, hay que revalidarlos.
+El diseño es un sistema propio, *"Papel y tinta"*: papel crudo, tinta negra cálida y tipografía editorial, sin decoración que cueste espacio. Los tres colores de estado están validados para contraste y daltonismo sobre fondo claro; si los tocás, hay que revalidarlos.
 
 La interfaz ocupa exactamente el alto de la ventana: la página no hace scroll, solo lo hacen la barra lateral y la rejilla de lecturas.
 

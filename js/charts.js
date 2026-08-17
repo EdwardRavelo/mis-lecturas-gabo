@@ -45,9 +45,9 @@ function renderBarraEstados(libros) {
     if (!contenedor) return;
 
     const estados = [
-        { clave: 'Leído', etiqueta: 'Leídos', color: token('--leido', '#199e70') },
-        { clave: 'Leyendo', etiqueta: 'Leyendo', color: token('--leyendo', '#c98500') },
-        { clave: 'Pendiente', etiqueta: 'Pendientes', color: token('--pendiente', '#9085e9') }
+        { clave: 'Leído', etiqueta: 'Leídos', color: token('--leido', '#007551') },
+        { clave: 'Leyendo', etiqueta: 'Leyendo', color: token('--leyendo', '#B57C00') },
+        { clave: 'Pendiente', etiqueta: 'Pendientes', color: token('--pendiente', '#6A4FC7') }
     ];
 
     const total = libros.length;
@@ -130,11 +130,11 @@ function createPagesChart(libros) {
     ctx.style.display = '';
     contenedor?.querySelector('.grid-vacio')?.remove();
 
-    const tinta = token('--tinta', '#F5F1E8');
-    const tenue = token('--tinta-tenue', '#8A857A');
-    const rejilla = token('--rejilla', 'rgba(245,241,232,0.06)');
-    const superficie = token('--superficie', '#171613');
-    const acento = token('--tema-acento', '#3987e5');
+    const tinta = token('--tinta', '#1C1815');
+    const tenue = token('--tinta-tenue', '#938878');
+    const rejilla = token('--rejilla', 'rgba(28,24,21,0.09)');
+    const papel = token('--plano', '#FBF7F0');
+    const acento = token('--tema-acento', '#B57C00');
 
     pagesChart = new Chart(ctx, {
         type: 'bar',
@@ -178,13 +178,14 @@ function createPagesChart(libros) {
                 // Una sola serie: el título de la tarjeta ya la nombra.
                 legend: { display: false },
                 tooltip: {
-                    backgroundColor: superficie,
-                    borderColor: rejilla,
-                    borderWidth: 1,
-                    titleColor: tinta,
-                    bodyColor: tinta,
+                    // Invertido: tinta de fondo y papel de texto. Un tooltip
+                    // claro sobre una gráfica clara necesitaría un borde para
+                    // separarse del fondo; así se lee solo.
+                    backgroundColor: tinta,
+                    titleColor: papel,
+                    bodyColor: papel,
                     padding: 10,
-                    cornerRadius: 8,
+                    cornerRadius: 6,
                     displayColors: false,
                     callbacks: {
                         label: c => [

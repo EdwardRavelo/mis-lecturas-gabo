@@ -1,44 +1,62 @@
 /* ========================================
    Diario de Lecturas — Sistema de diseño
    ========================================
-   "Cuaderno nocturno": carbón cálido y tinta color papel, en vez del azul
-   marino frío con neón de la versión anterior. La identidad ya no cuelga de
-   ningún autor concreto: el color lo pone cada tema.
+   "Papel y tinta": papel crudo y tinta negra cálida, tipografía editorial y
+   nada de decoración que cueste espacio. La identidad no cuelga de ningún
+   autor concreto: el color lo pone cada tema.
+
+   Todo color vive aquí. Ni el CSS de más abajo ni js/charts.js repiten un
+   hex: cambiar de tema es reescribir este bloque y nada más.
 
    Los tres colores de estado están VALIDADOS con el validador de la skill
-   dataviz sobre la superficie #171613, con --pairs all (los tres conviven en
-   la barra apilada):
-     peor par  #c98500 ↔ #199e70  ΔE 8.4 protanopía · 19.8 visión normal
-     los tres  dentro de la banda L 0.48–0.67, sobre el suelo de croma, ≥3:1
-   No cambies estos hex sin volver a pasar el validador.
+   dataviz sobre papel, con --pairs all (los tres conviven en la barra
+   apilada de estados):
+     peor par  #B57C00 ↔ #007551  ΔE 10.4 protanopía · 21.1 visión normal
+     los tres  dentro de la banda L 0.43–0.77, sobre el suelo de croma, ≥3:1
+   Todos los checks en PASS, sin advertencias.
+
+   OJO: esa validación es contra fondo CLARO. La paleta anterior se validó
+   sobre #171613, y por eso no se pudo reutilizar al pasar a papel: el verde
+   y el gris quedaban a ΔE 5.2 en protanopía. Si algún día se vuelve al tema
+   oscuro, hay que repetir el proceso, no invertir los valores.
    ======================================== */
 
 :root {
-    /* Superficies */
-    --plano: #100F0D;             /* fondo de página */
-    --superficie: #171613;        /* tarjetas, gráficas */
-    --superficie-alta: #211F1A;   /* hover, elementos elevados */
-    --superficie-suave: rgba(245, 241, 232, 0.04);
+    /* Superficies — papel */
+    --plano: #FBF7F0;             /* fondo de página, papel crudo */
+    --superficie: #FFFFFF;        /* tarjetas, panel, modal */
+    --superficie-alta: #F3ECE1;   /* hover, elementos elevados */
+    --superficie-suave: rgba(28, 24, 21, 0.045);
 
     /* Tinta */
-    --tinta: #F5F1E8;             /* texto principal, papel cálido */
-    --tinta-suave: #B8B2A5;       /* secundario */
-    --tinta-tenue: #8A857A;       /* ejes, etiquetas menores */
+    --tinta: #1C1815;             /* texto principal, negro cálido */
+    --tinta-suave: #5B5249;       /* secundario */
+    --tinta-tenue: #938878;       /* ejes, etiquetas menores */
 
     /* Líneas */
-    --borde: rgba(245, 241, 232, 0.10);
-    --borde-fuerte: rgba(245, 241, 232, 0.20);
-    --rejilla: rgba(245, 241, 232, 0.06);
+    --borde: rgba(28, 24, 21, 0.13);
+    --borde-fuerte: rgba(28, 24, 21, 0.26);
+    --rejilla: rgba(28, 24, 21, 0.09);
 
     /* Estados de lectura — validados, no tocar sin revalidar */
-    --leido: #199e70;
-    --leyendo: #c98500;
-    --pendiente: #9085e9;
+    --leido: #007551;
+    --leyendo: #B57C00;
+    --pendiente: #6A4FC7;
 
-    /* Acento de la app; app.js lo sobrescribe con el color del tema activo */
-    --tema-acento: #3987e5;
+    /* Fondos tenues de los mismos estados, para chips y etiquetas */
+    --leido-wash: rgba(0, 117, 81, 0.11);
+    --leyendo-wash: rgba(181, 124, 0, 0.13);
+    --pendiente-wash: rgba(106, 79, 199, 0.11);
 
-    --peligro: #e66767;
+    /* Acento de la app; app.js lo sobrescribe con el color del tema activo.
+       Por defecto, el amarillo mariposa de donde viene el proyecto. */
+    --tema-acento: #B57C00;
+
+    --peligro: #B3261E;
+    --peligro-wash: rgba(179, 38, 30, 0.10);
+
+    /* Velo de modales y del cajón lateral en móvil */
+    --velo: rgba(28, 24, 21, 0.45);
 
     /* Tipografía: serif para títulos (un diario, no un panel de control),
        sans para todo lo que sea dato. */
@@ -51,12 +69,13 @@
     --esp-lg: 1.5rem;
     --esp-xl: 2.25rem;
 
-    --radio-sm: 8px;
-    --radio-md: 12px;
-    --radio-lg: 18px;
+    /* Radios pequeños: en papel, una esquina de 18px se lee como plástico */
+    --radio-sm: 4px;
+    --radio-md: 7px;
+    --radio-lg: 11px;
 
-    --sombra: 0 12px 32px rgba(0, 0, 0, 0.45);
-    --transicion: 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    --sombra: 0 10px 30px rgba(28, 24, 21, 0.14);
+    --transicion: 0.16s cubic-bezier(0.2, 0, 0.2, 1);
 
     --ancho-sidebar: 290px;
 }
@@ -144,7 +163,7 @@ img { max-width: 100%; display: block; }
     position: fixed;
     inset: 0;
     z-index: 800;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--velo);
 }
 
 .sidebar-overlay.active { display: block; }
@@ -625,7 +644,9 @@ img { max-width: 100%; display: block; }
     justify-content: center;
     border-radius: 50%;
     border: 1px solid var(--borde-fuerte);
-    background: rgba(16, 15, 13, 0.85);
+    /* Van encima de la portada, que es una imagen cualquiera: hace falta un
+       fondo propio y opaco, no una superficie translúcida del tema. */
+    background: rgba(255, 255, 255, 0.94);
     color: var(--tinta-suave);
     font-size: 0.72rem;
     backdrop-filter: blur(6px);
@@ -704,9 +725,9 @@ img { max-width: 100%; display: block; }
     white-space: nowrap;
 }
 
-.status-leido { background: rgba(25, 158, 112, 0.16); color: var(--leido); }
-.status-leyendo { background: rgba(201, 133, 0, 0.16); color: var(--leyendo); }
-.status-pendiente { background: rgba(144, 133, 233, 0.16); color: var(--pendiente); }
+.status-leido { background: var(--leido-wash); color: var(--leido); }
+.status-leyendo { background: var(--leyendo-wash); color: var(--leyendo); }
+.status-pendiente { background: var(--pendiente-wash); color: var(--pendiente); }
 
 /* El protagonista de la tarjeta. Tres líneas como tope: sin él, un título
    largo estira su tarjeta y desalinea la fila entera. */
@@ -999,9 +1020,9 @@ img { max-width: 100%; display: block; }
     font-weight: 600;
 }
 
-.timeline-status.leido { background: rgba(25, 158, 112, 0.16); color: var(--leido); }
-.timeline-status.leyendo { background: rgba(201, 133, 0, 0.16); color: var(--leyendo); }
-.timeline-status.pendiente { background: rgba(144, 133, 233, 0.16); color: var(--pendiente); }
+.timeline-status.leido { background: var(--leido-wash); color: var(--leido); }
+.timeline-status.leyendo { background: var(--leyendo-wash); color: var(--leyendo); }
+.timeline-status.pendiente { background: var(--pendiente-wash); color: var(--pendiente); }
 
 /* Gráficas */
 .chart-mini-title,
@@ -1089,7 +1110,7 @@ img { max-width: 100%; display: block; }
 .modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background: var(--velo);
     backdrop-filter: blur(3px);
 }
 
@@ -1123,13 +1144,14 @@ img { max-width: 100%; display: block; }
     padding: 0.35rem;
     border: none;
     border-radius: 50%;
-    background: rgba(16, 15, 13, 0.7);
-    color: var(--tinta);
-    backdrop-filter: blur(6px);
-    transition: background var(--transicion);
+    /* Ya no va sobre una portada a sangre, sino sobre la cabecera clara del
+       modal: basta con una superficie del tema. */
+    background: var(--superficie-alta);
+    color: var(--tinta-suave);
+    transition: all var(--transicion);
 }
 
-.modal-close:hover { background: var(--superficie-alta); }
+.modal-close:hover { background: var(--borde); color: var(--tinta); }
 
 /* Cabecera: portada como miniatura, no como hero.
    El hero difuminado de 190px se comía un tercio del modal para repetir una
@@ -1415,16 +1437,16 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 .btn-full { width: 100%; }
 
 .btn-primary { background: var(--tinta); color: var(--plano); }
-.btn-primary:hover { background: #fff; }
+.btn-primary:hover { background: #000; }
 
 .btn-peligro {
     margin-top: var(--esp-sm);
     background: transparent;
-    border-color: rgba(230, 103, 103, 0.4);
+    border-color: color-mix(in srgb, var(--peligro) 40%, transparent);
     color: var(--peligro);
 }
 
-.btn-peligro:hover { background: rgba(230, 103, 103, 0.12); border-color: var(--peligro); }
+.btn-peligro:hover { background: var(--peligro-wash); border-color: var(--peligro); }
 
 .comentarios-container { display: flex; flex-direction: column; gap: var(--esp-sm); }
 
@@ -1542,7 +1564,7 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 }
 
 .login-btn-github { background: var(--tinta); border-color: var(--tinta); color: var(--plano); }
-.login-btn-github:hover { background: #fff; }
+.login-btn-github:hover { background: #000; }
 
 .login-btn-google:hover { background: var(--superficie-alta); color: var(--tinta); }
 
@@ -1555,8 +1577,8 @@ textarea.form-input { resize: vertical; min-height: 80px; }
     margin-top: var(--esp-md);
     padding: var(--esp-sm) var(--esp-md);
     border-radius: var(--radio-sm);
-    border: 1px solid rgba(230, 103, 103, 0.3);
-    background: rgba(230, 103, 103, 0.12);
+    border: 1px solid color-mix(in srgb, var(--peligro) 30%, transparent);
+    background: var(--peligro-wash);
     color: var(--peligro);
     font-size: 0.8rem;
 }
@@ -1574,8 +1596,8 @@ textarea.form-input { resize: vertical; min-height: 80px; }
     align-items: center;
     gap: var(--esp-sm);
     padding: 0.6rem var(--esp-md);
-    border-bottom: 1px solid rgba(201, 133, 0, 0.35);
-    background: rgba(201, 133, 0, 0.14);
+    border-bottom: 1px solid color-mix(in srgb, var(--leyendo) 35%, transparent);
+    background: var(--leyendo-wash);
     color: var(--leyendo);
     font-size: 0.8rem;
     backdrop-filter: blur(8px);
@@ -1594,14 +1616,14 @@ textarea.form-input { resize: vertical; min-height: 80px; }
     flex-shrink: 0;
     padding: 0.25rem 0.7rem;
     border-radius: var(--radio-sm);
-    border: 1px solid rgba(201, 133, 0, 0.4);
+    border: 1px solid color-mix(in srgb, var(--leyendo) 40%, transparent);
     background: transparent;
     color: var(--leyendo);
     font-size: 0.75rem;
     font-weight: 500;
 }
 
-.offline-banner-btn:hover { background: rgba(201, 133, 0, 0.2); }
+.offline-banner-btn:hover { background: color-mix(in srgb, var(--leyendo) 20%, transparent); }
 
 /* ========================================
    Cabecera móvil

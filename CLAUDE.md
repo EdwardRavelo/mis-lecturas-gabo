@@ -140,11 +140,15 @@ Day counts derive from state: `Leído` → `final - inicio`; `Leyendo` → `toda
 
 `css/styles.css` holds the tokens and layout; `css/animations.css` holds keyframes and a `prefers-reduced-motion` block.
 
-The system is **"Cuaderno nocturno"**: warm charcoal surfaces and paper-coloured ink. Identity no longer hangs off any one author — the accent colour is supplied per theme, injected by `aplicarColorTema()` as `--tema-acento` on `:root`.
+The system is **"Papel y tinta"**: raw-paper surfaces and warm near-black ink, editorial typography (Fraunces for headings, DM Sans for data), small radii and no decoration that costs space. Identity no longer hangs off any one author — the accent colour is supplied per theme, injected by `aplicarColorTema()` as `--tema-acento` on `:root`.
 
-**The three status colours (`--leido`, `--leyendo`, `--pendiente`) are validated** for contrast and colour-blindness against the `#171613` surface, with all three coexisting in the stacked bar. The header comment in `styles.css` records the worst pair (ΔE 8.4 under protanopia). **Do not change those hex values without re-running the validator** — and note the validation assumes a dark surface, so switching to a light theme invalidates it.
+**Every colour lives in the `:root` block.** Nothing downstream repeats a hex — not the rest of the CSS, not `js/charts.js`, which reads tokens via `token()`. Retheming means rewriting that block and nothing else.
 
-`js/charts.js` reads its colours from these tokens via `token()`; never hardcode a colour there.
+**The three status colours (`--leido`, `--leyendo`, `--pendiente`) are validated** for contrast and colour-blindness with the `dataviz` skill's validator, `--pairs all` (the three coexist in the stacked status bar). Worst pair `#B57C00` ↔ `#007551`: ΔE 10.4 protanopia, 21.1 normal vision; all checks PASS. **Do not change those hex values without re-running the validator.**
+
+That validation is **against a light surface**. The previous palette was validated against `#171613` and could not be carried over when the theme went to paper — its green and grey collapsed to ΔE 5.2 under protanopia. If the theme ever goes dark again, re-run the process; do not invert the values.
+
+The per-theme accent is user data and is **not** validated: a light theme colour will read weakly as text on paper. Themes are editable from the UI, so the fix is to change the theme's colour, not to hardcode an override.
 
 **The app is a 100dvh shell and the page never scrolls.** `body` is `overflow: hidden`; `.library-layout` is `height: 100dvh`. Only the sidebar, `#books-grid` and the modal body scroll. Consequences:
 
