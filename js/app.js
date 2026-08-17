@@ -579,8 +579,6 @@ function renderizarTimeline() {
     const timeline = document.getElementById('timeline');
     if (!timeline) return;
 
-    timeline.innerHTML = '<div class="timeline-line"></div>';
-
     const conFecha = librosDelTema()
         .filter(l => l.inicio || l.final)
         .map(l => ({ libro: l, fecha: parseFechaEspañol(l.final || l.inicio) }))
@@ -588,9 +586,13 @@ function renderizarTimeline() {
         .sort((a, b) => b.fecha - a.fecha);
 
     if (!conFecha.length) {
-        timeline.innerHTML += '<p class="grid-vacio">Aún no hay lecturas con fecha.</p>';
+        // Sin la línea: una raya vertical al lado de un aviso, sin un solo
+        // hito que sostener, no significa nada.
+        timeline.innerHTML = '<p class="grid-vacio">Aún no hay lecturas con fecha.</p>';
         return;
     }
+
+    timeline.innerHTML = '<div class="timeline-line"></div>';
 
     conFecha.forEach(({ libro, fecha }) => {
         const clase = libro.estado === 'Leído' ? 'leido'

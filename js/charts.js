@@ -112,23 +112,38 @@ function createPagesChart(libros) {
     const valores = ordenados.map(m => porMes[m].paginas);
     const cuentas = ordenados.map(m => porMes[m].libros);
 
-    if (pagesChart) pagesChart.destroy();
+    // Se anula la referencia además de destruirla: si más abajo salimos
+    // antes de reasignarla, quedaría apuntando a un gráfico ya destruido.
+    if (pagesChart) {
+        pagesChart.destroy();
+        pagesChart = null;
+    }
 
-    const contenedor = ctx.parentElement;
+    // El canvas vive dentro de .chart-caja (altura fija, la que impide que
+    // el gráfico crezca sin fin); el aviso de "sin datos" va fuera de ella,
+    // en la tarjeta, para no quedar centrado en un hueco de 210px.
+    const caja = ctx.parentElement;
+    const contenedor = caja?.parentElement ?? caja;
 
     if (!etiquetas.length) {
         // Un gráfico vacío con un "Sin datos" falso es peor que decirlo.
         if (contenedor) {
             contenedor.querySelector('.grid-vacio')?.remove();
-            ctx.style.display = 'none';
+            if (caja) caja.style.display = 'none';
             contenedor.insertAdjacentHTML('beforeend',
                 '<p class="grid-vacio">Aún no has terminado ningún libro con fecha.</p>');
         }
         return;
     }
 
-    ctx.style.display = '';
+    if (caja) caja.style.display = '';
     contenedor?.querySelector('.grid-vacio')?.remove();
+
+    // Con el panel de análisis plegado, o con la pestaña "Timeline" delante,
+    // la caja está oculta y mide 0: construir aquí daría un gráfico de tamaño
+    // cero. app.js vuelve a llamar a initCharts() al abrir el panel y al
+    // entrar en la pestaña, que es cuando ya se puede medir.
+    if (caja && !caja.offsetParent) return;
 
     const tinta = token('--tinta', '#1C1815');
     const tenue = token('--tinta-tenue', '#938878');

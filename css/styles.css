@@ -973,7 +973,9 @@ img { max-width: 100%; display: block; }
 .timeline-item {
     position: relative;
     display: grid;
-    grid-template-columns: 8.5rem 1fr auto;
+    /* La primera columna lleva la fecha COMPLETA ("24/septiembre/2026"), no
+       un año: con 8.5rem se partía en dos líneas y descuadraba la fila. */
+    grid-template-columns: 9.5rem minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--esp-md);
     padding: 0.6rem 0;
@@ -1003,6 +1005,7 @@ img { max-width: 100%; display: block; }
     font-size: 0.76rem;
     font-variant-numeric: tabular-nums;
     color: var(--tinta-tenue);
+    white-space: nowrap;
 }
 
 .timeline-title {
@@ -1035,9 +1038,19 @@ img { max-width: 100%; display: block; }
     color: var(--tinta-tenue);
 }
 
-/* Altura suficiente para el gráfico MÁS la banda del eje: si no, la tarjeta
-   genera un scroll vertical diminuto (anti-patrón documentado). */
-.chart-container-small { min-height: 260px; }
+.chart-container-small { min-width: 0; }
+
+/* Altura FIJA, no min-height.
+   Chart.js corre con maintainAspectRatio:false y mide el contenedor del
+   canvas para dimensionarlo. Si ese contenedor tiene altura automática, el
+   canvas lo hace crecer, el ResizeObserver dispara, el canvas vuelve a
+   crecer… y sale la barra infinita. Con una altura fija el ciclo se corta.
+   El alto da para el gráfico MÁS la banda del eje: si se queda corto, la
+   tarjeta genera un scroll diminuto (anti-patrón documentado). */
+.chart-caja {
+    position: relative;
+    height: 210px;
+}
 
 .charts-grid-compact { display: grid; gap: var(--esp-lg); }
 

@@ -231,7 +231,13 @@
                         <div class="charts-grid-compact">
                             <div class="chart-container-small">
                                 <h4 class="chart-title-small">Páginas por Mes</h4>
-                                <canvas id="pages-chart"></canvas>
+                                <!-- La caja da al canvas una altura FIJA. Sin ella,
+                                     con maintainAspectRatio:false el gráfico crece
+                                     sin fin: mide el contenedor, el contenedor crece
+                                     con el canvas, y vuelta a empezar. -->
+                                <div class="chart-caja">
+                                    <canvas id="pages-chart"></canvas>
+                                </div>
                             </div>
                         </div>
                     </div>
