@@ -207,12 +207,40 @@ The signature component, and since the cut of 2026-09-26 the **only** view: no c
 
 6. **`estanteDisponible` is the kill switch**, false when `THREE` is missing or the browser gives no WebGL context. `montarMuro()` / `montarEstanteModal()` then return false and `app.js` paints `crearEstantePlano()` instead — the same spines, flat, fully usable. The availability rules in this file are technical, not aesthetic: the redesign lifted the visual invariants, not the rule that the app survives a dead CDN.
 
-### Turning it: drag to rotate, wheel to zoom
+### Navigating it: drag to move, wheel to zoom at the cursor, middle-drag to turn
 
 Both scenes take `OrbitControls` through `crearControles()`, with the same limits so the
 furniture behaves the same in the wall and in the modal: ±30° of azimuth, ±20° around the
-horizontal, and 0.55×–1.6× the fitted distance. Panning is off — sliding sideways only takes
-the furniture out of frame.
+horizontal, and 0.22×–1.6× the fitted distance. The near limit is what lets you get close
+enough to read one shelf's spines; it was 0.55× and that only ever framed the whole cabinet.
+
+**Buttons are mapped like a map, not like a 3D viewer**: left drag pans, middle drag (the
+wheel pressed) rotates, wheel zooms. Navigating is what you do constantly, so it gets the
+primary gesture; turning is the gesture for *looking at* the thing. The right button is left
+unbound on purpose. One finger pans and two fingers dolly-rotate.
+
+The middle button needs one guard: pressing it triggers Chrome's autoscroll — the four-arrow
+widget — which swallows the drag. `OrbitControls` does not stop it, because it never calls
+`preventDefault()` on `pointerdown`. `instalarNavegacion()` does, in the capture phase;
+cancelling the `pointerdown` also suppresses the compatibility `mousedown` that actually
+triggers the widget.
+
+**Zoom goes to the cursor, and that is hand-written.** `OrbitControls` always dollies toward
+its `target`, which in a wide cabinet means you must zoom into the middle and then pan across
+to the shelf you wanted. r147 has no `zoomToCursor` — it landed in a later release — so
+`instalarNavegacion()` takes the wheel. It finds the world point under the cursor (whatever
+the ray hits, or a plane through the target when the cursor is over empty space) and scales
+camera *and* target toward it by the same factor: the point stays pinned on screen while the
+distance drops, which is what "zoom there" means.
+
+That listener sits on the container in the **capture** phase and calls `stopPropagation()`,
+so the control's own wheel handler on the canvas never sees the event. Its `enableZoom` stays
+`true` on purpose, because the two-finger pinch is still handled by the control itself.
+
+**Panning is bounded.** `limitar()` clamps `controles.target` to the furniture's bounding box
+plus 12%, and shifts the camera by the same delta so the view does not jerk — the pan simply
+stops at the edge. It runs from the `change` handler. Without it you can drag the shelf off
+into empty space and have no idea where you are.
 
 **The camera orbits; the furniture does not turn.** That is what lets the shadow map be frozen
 (`congelarSombras()`): nothing in the scene moves while you drag, so there is nothing to
@@ -237,16 +265,151 @@ Widening the angle means building a carcass first.
    The existing `animar()` loop hosts it and keeps running while `update()` returns true. This
    was already broken in the modal before the wall got controls — the spin stopped dead on
    release.
-4. **`renderizarLibros()` rebuilds the wall on every keystroke**, so the angle has to survive
-   it. `vistaMuro` keeps theta, phi and the distance **as a fraction** of the fitted one —
-   absolute distance would be wrong, because the fit depends on how many shelves the filter
-   left visible. `encuadrarEscena()` therefore returns `{ centro, dist }`, not just a point.
+4. **`renderizarLibros()` rebuilds the wall on every keystroke**, so the view has to survive
+   it. `vistaMuro` keeps theta, phi, the distance **as a fraction** of the fitted one, and the
+   pan offset **also as a fraction** — both absolute forms would be wrong, because the fit
+   depends on how many shelves the filter left visible and the cabinet shrinks as you filter.
+   `encuadrarEscena()` therefore returns `{ centro, dist }`, not just a point, and the view is
+   restored *after* the controls exist, since it has to set their target too.
 
 Auto-fit on resize only applies until the first interaction; afterwards a window resize just
 updates the aspect ratio instead of yanking the camera back to the front. Double-clicking the
 background resets — and it clears `vistaMuro` *after* calling `controles.update()`, because
 that call fires `change` synchronously and the handler there would otherwise immediately save
 the view again.
+
+### Looking like wood instead of like WebGL
+
+Five things carry the realism, and they are easy to undo by accident:
+
+- **Tone mapping.** `ACESFilmicToneMapping` at exposure 0.86. Without it highlights clip to flat
+  white, which is the single loudest "this is a render" cue.
+- **An environment map.** `RoomEnvironment` through `PMREMGenerator`, generated in code with
+  nothing downloaded. A `MeshStandardMaterial` with no `envMap` has **no specular at all** —
+  every surface is pure diffuse, which is why the wood used to read as matte plastic. It also
+  lights in diffuse, so `ajustarEntorno()` drops `envMapIntensity` to 0.30 on every material;
+  at full strength the whole piece washes out to pastel.
+- **Bevelled edges.** Books and planks use `RoundedBoxGeometry` at their real size, not a scaled
+  unit box — scaling a unit rounded box non-uniformly stretches the bevel along the long axis.
+  A 90° edge never catches a highlight and the eye reads that instantly.
+- **Contact shadow.** One soft dark strip per shelf where the row meets the plank. Cast shadows
+  do not produce the darkening in the millimetre gap under a book, and without it the books look
+  pasted on.
+- **A room to cast into** — see below.
+
+**The face mapping is the thing to be careful with.** `BoxGeometry` order is +X, −X, +Y, −Y,
++Z, −Z. With the spine toward the viewer at +Z: ±X are the **covers**, ±Y and −Z are **paper**.
+This was wrong for a while — the covers were painted with the page material — and every tilted
+book showed a big cream slab that looked like cardboard.
+
+**The spine title is its own plane, not a face material.** `RoundedBoxGeometry` spreads UVs over
+the rounded shell, so the flat face no longer maps 1:1 to the texture and titles came out
+clipped at the sides. A plane 0.02 in front of the spine sidesteps it entirely.
+
+### The room, and the group that keeps the camera sane
+
+The furniture stands against a back wall, with a floor below. What the planes buy is not
+themselves: it is the shadow, and the sense that the cabinet is somewhere. An object with
+nothing behind or beneath it does not look like it is anywhere; it looks cut out.
+
+**The wall spans far more than the furniture** — fourteen times its width. The demanding case
+is not the opening frame but the worst one: the camera at its furthest (1.6× the fitted
+distance, around 400 units) *and* turned to the ±30° stop. There the camera slides some
+400·sin(30°) ≈ 200 sideways and still sees about 140 further that way, so the farthest visible
+point lands roughly 340 from centre. At seven times the cabinet's width the wall reached 260
+and black showed at the edge. A plane is two triangles, so overshooting costs nothing and
+falling short is obvious on sight.
+
+It was briefly built as a niche instead — five faces boxing the cabinet in, pointing inward on
+`FrontSide` so the near wall culled away as you turned. It worked, but it framed the furniture
+more than it housed it, and it was dropped. If anyone rebuilds that, the culling trick is the
+part worth keeping.
+
+`construirHabitacion()` also widens the light's shadow frustum; left at the furniture's size the
+shadow gets cropped by a straight edge halfway up the wall, which looks worse than no shadow at
+all. The frustum is sized from the *furniture*, not from the wall — the wall is now hundreds of
+units across and scaling the shadow camera to it would waste the whole 2048² map on empty space.
+
+**The wall and the floor go in the scene. The shelves go in a `THREE.Group` called `mueble`.**
+This is not tidiness, it is load-bearing: `encuadrarEscena()` and the pan limits in
+`instalarNavegacion()` both measure a bounding box, and measuring one that includes a 520-unit
+wall pushes the camera back until the furniture is a postage stamp and leaves the pan limits
+meaningless. Anything decorative added later goes in the scene, never in `mueble`.
+
+`tocado()` can keep raycasting the whole scene: it walks up parents looking for `libroId` or
+`esBalda` and finds neither on a wall. For the wheel it is an improvement — pointing at empty
+space now focuses a real surface instead of an imaginary plane.
+
+### Why the scene has two colour temperatures
+
+`--pared` is a deep petrol blue and the key light is amber. That pairing is deliberate and it is
+what stopped the render looking muddy: with a single warm light and warm surfaces, everything
+fell in one family of browns and read as monochrome. Cool shadows against warm highlights is
+what gives a dark scene colour without brightening it.
+
+The fill light was at 0.09 — effectively off — and is now 0.30. Book lightness was clamped to
+0.13–0.38, which is very dark for something meant to read as colour; it is now 0.20–0.55. Spine
+hue spreads ±32° around the theme accent rather than ±18°, so a shelf still reads as one theme
+but stops looking painted from a single tin.
+
+**A horizontal plane catches the key light almost head-on** while the wall takes it at a
+glancing angle, so with the same colour the floor lights up far brighter and reads as a pale
+ledge under the cabinet. It is darkened on its own rather than by dimming the whole scene, and
+it sits well below the bottom shelf — close up it just looked like one more plank.
+
+**The room must stay quieter than the furniture.** Wall and floor set `envMapIntensity` to 0.12
+and mark `userData.entornoFijo`, which `ajustarEntorno()` honours — that pass runs after the
+room is built and used to overwrite the setting, leaving a wall that lit up brighter than the
+cabinet it was supposed to sit behind.
+
+### Spine thickness, and the data it does not have
+
+`grosorLomo()` is `0.55 + paginas / 190`, clamped to 0.6–3.2: a 150-page book is visibly
+thinner than a 500-page one.
+
+**But the 94 readings imported by `supabase-schema-v3.sql` have no page counts** — that INSERT
+does not include the column — so they all fell back to a single fixed width and the real shelf
+was a picket fence of identical slats. Without pages the thickness now comes from
+`hashEstante(id + '|grosor')` instead, spread over 0.8–2.2. It is deterministic like everything
+else here, so a book keeps its width across the rebuild that happens on every keystroke, and
+the moment a reading gets a real page count it starts using it.
+
+### Spines are rounded, and that is a texture multiply
+
+A flat-coloured spine face is the giveaway that a book is a box. `texturaCurvatura()` is one
+shared greyscale gradient — darker at both edges, white at 42% — used as the `map` of every
+cover material. `map` **multiplies** `color`, so white leaves the book's colour alone and grey
+darkens the edges: a rounded back for one texture across the whole wall, no extra mesh, no
+transparency.
+
+It was first tried as a translucent plane in front of the spine, and that was wrong: a
+`MeshStandardMaterial` plane is lit in its own right, so even at low alpha it adds white and
+washes the colour out of every book. To *shade* a surface rather than light it, reach for a
+multiply, not an overlay.
+
+Keep the gradient gentle. The first pass went down to 28% at the edges and darkened the whole
+spine rather than just its borders, which made the titles in the modal unreadable — they sit on
+their own plane over the top and cannot outrun a spine that has gone dark. `texturaLomo()`
+picks ink colour at a lightness threshold of 0.52, deliberately biased toward light text,
+because the rendered spine is always somewhat darker than its base colour suggests.
+
+Cover roughness varies per book (0.55–0.95 from `hashEstante(id + '|acabado')`): matte cloth at
+one end, a satin dust jacket at the other. With all 97 at a single value the row caught the
+light as one continuous sheet of plastic.
+
+### Texture budget
+
+Only the spine title is unique per book. `texturaHojas()` quantises to six variants,
+`texturaTejuelo()` has exactly three — one per state — and `texturaCurvatura()` is a single
+texture for the entire wall, so a 52-book theme builds 52 + 10 canvases instead of 156. They go
+through `texturaCacheada()`, a module-level cache emptied in `destruir()`; that is safe
+precisely because two scenes never live at once.
+
+Spine canvases are 128×512 on purpose. 256×1024 is 1 MB each — 54 MB of video memory for one
+large theme — and a spine draws about 20px wide even in the modal. When titles looked clipped
+the cause was the UV mapping above, never the resolution.
+
+Opening the largest theme costs about 50 ms and closing about 60 ms.
 
 ### Accessibility is not optional here
 

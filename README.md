@@ -21,11 +21,11 @@ Empezó como un catálogo fijo de las 18 obras de Gabriel García Márquez y hoy
 - Portadas automáticas desde la API de Google Books
 
 **La estantería es la interfaz**
-- Una balda por tema, con el grosor de cada lomo a escala según las páginas del libro
+- Una balda por tema, contra una pared y con su sombra, y el grosor de cada lomo a escala según las páginas del libro (repartido por otro criterio cuando esas páginas no se conocen)
 - Al pulsar una balda se abre a pantalla casi completa, con los libros repartidos por subtema
 - El color mide el avance: a todo color lo leído, a media tinta lo que estás leyendo, en gris lo pendiente
 - Al pasar el cursor por un lomo, una etiqueta dice qué libro es
-- Se puede girar el mueble arrastrando y acercarse con la rueda; doble click en el fondo vuelve al frente
+- Se navega como en un mapa: arrastrar desplaza, la rueda acerca allí donde apunta el cursor y con la rueda pulsada se gira; doble click en el fondo vuelve al frente
 - El estado de cada lectura va en un tejuelo al pie del lomo, y los recuentos en una leyenda sobre el mueble
 - Todo lo demás —buscar, filtrar, añadir, exportar, cerrar sesión— vive en el menú «···»
 - Si el navegador no da WebGL o no carga la librería, cae a un estante plano con la misma información

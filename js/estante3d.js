@@ -80,7 +80,15 @@ function hashEstante(texto) {
 // el raro: es el común.
 function grosorLomo(libro) {
     const p = Number(libro.paginas);
-    if (!p || Number.isNaN(p)) return 1.15;
+    if (!p || Number.isNaN(p)) {
+        // Las 94 lecturas que entraron por supabase-schema-v3.sql no traen
+        // `paginas`: su INSERT no incluye la columna. Con un grosor fijo el
+        // estante real era una valla de listones idénticos, así que sin dato
+        // se reparte por hash. Determinista, como todo lo demás: un libro
+        // tiene siempre el mismo grosor aunque el muro se reconstruya.
+        // En cuanto una lectura reciba sus páginas de verdad, pasa a usarlas.
+        return 0.8 + hashEstante(libro.id + '|grosor') * 1.4;
+    }
     return Math.max(0.6, Math.min(3.2, 0.55 + p / 190));
 }
 
@@ -122,12 +130,18 @@ function colorLomo(libro, acentoHex) {
     const factor = CROMA_POR_ESTADO[libro.estado] ?? CROMA_POR_ESTADO['Pendiente'];
 
     return new THREE.Color().setHSL(
-        (hsl.h + (n - 0.5) * 0.10 + 1) % 1,
+        // Tono: ±32° alrededor del acento del tema. Estaba en ±18° y una
+        // balda entera salía casi del mismo color; un estante de verdad es
+        // mucho más desordenado. Con este margen la balda sigue leyéndose
+        // como un tema, pero deja de parecer pintada de una sola lata.
+        (hsl.h + (n - 0.5) * 0.18 + 1) % 1,
         croma * factor,
-        // La luminosidad NO cambia con el estado: lo único que separa un libro
+        // La luminosidad NO cambia con el ESTADO: lo único que separa un libro
         // leído de uno pendiente es el color. Si además variara el brillo, los
-        // pendientes se hundirían en el fondo y dejarías de contarlos.
-        Math.max(0.13, Math.min(0.38, hsl.l * 0.72 + (n - 0.5) * 0.16))
+        // pendientes se hundirían en el fondo y dejarías de contarlos. Lo que
+        // sí varía es por libro, y el rango subió de 0.13–0.38 a 0.20–0.55:
+        // acotado tan abajo, todo el mueble se veía apagado.
+        Math.max(0.20, Math.min(0.55, hsl.l * 0.86 + (n - 0.5) * 0.22))
     );
 }
 
@@ -373,11 +387,14 @@ function texturaLomo(libro, colorFondo) {
     lienzo.height = 512;
     const ctx = lienzo.getContext('2d');
 
-    // Fondo transparente: el color lo pone la tapa que hay debajo. Aquí solo
-    // van los filetes y el texto.
+    // Fondo transparente: el color lo pone la tapa que hay debajo. Encima
+    // van el degradado de curvatura, los filetes y el texto.
     ctx.clearRect(0, 0, 128, 512);
 
-    const claro = colorFondo.getHSL({ h: 0, s: 0, l: 0 }).l > 0.42;
+    // Umbral bajo a propósito: el mapa de curvatura oscurece algo el lomo
+    // renderizado, así que un tono que en el color base parecía claro puede
+    // no serlo en pantalla. Ante la duda, texto claro.
+    const claro = colorFondo.getHSL({ h: 0, s: 0, l: 0 }).l > 0.52;
     const tinta = claro ? 'rgba(18,12,8,0.92)' : 'rgba(246,240,232,0.94)';
 
     // Filetes de latón arriba y abajo, como en una encuadernación
@@ -466,8 +483,8 @@ function crearEscenaEstante(contenedor, opciones) {
     const ambiente = new THREE.AmbientLight(0xFFF1DC, 0.05);
     escena.add(ambiente);
 
-    const lampara = new THREE.DirectionalLight(0xFFD9A8, 1.20);
-    lampara.position.set(-26, 34, 32);
+    const lampara = new THREE.DirectionalLight(0xFFD9A8, 1.05);
+    lampara.position.set(-20, 30, 54);
     lampara.castShadow = true;
     lampara.shadow.mapSize.set(2048, 2048);
     lampara.shadow.camera.near = 1;
@@ -477,10 +494,16 @@ function crearEscenaEstante(contenedor, opciones) {
     lampara.shadow.camera.top = 70;
     lampara.shadow.camera.bottom = -70;
     lampara.shadow.bias = -0.0012;
+    // PCFSoft difumina, pero el radio es lo que quita el canto de cuchilla.
+    lampara.shadow.radius = 4;
     escena.add(lampara);
 
-    const relleno = new THREE.DirectionalLight(0x9FB6D8, 0.09);
-    relleno.position.set(30, -10, 20);
+    // Relleno frío de verdad, no un testimonial. Con la clave cálida sola,
+    // toda la escena caía en la misma familia de marrones y se veía turbia:
+    // lo que saca de ahí a una escena oscura es el contraste de temperatura,
+    // luces ámbar contra sombras azuladas. Estaba a 0.09, o sea apagado.
+    const relleno = new THREE.DirectionalLight(0x8FB4DC, 0.30);
+    relleno.position.set(34, 6, 26);
     escena.add(relleno);
 
     // ---- render bajo demanda
@@ -578,15 +601,19 @@ function crearEscenaEstante(contenedor, opciones) {
 // bajo una luz fija habría que recalcularlo en cada fotograma del arrastre,
 // con 2048² de mapa y un centenar de libros.
 //
-// El recorrido va limitado a propósito: el mueble son tablas y un panel
-// trasero por balda, sin laterales ni techo ni suelo. Pasando de unos 30° se
-// vería que por detrás no hay nada.
+// El recorrido va limitado a propósito. Detrás hay una pared, así que el
+// fondo está cubierto, pero el mueble en sí son tablas y un panel trasero
+// por balda: no tiene laterales, ni techo, ni suelo. Pasando de unos 30° se
+// empieza a ver que no es un mueble cerrado sino una fachada.
 
 const LIMITES_ORBITA = {
     azimut: 0.52,                 // ±30°
     polarMin: Math.PI * 0.38,     // ±20° alrededor de la horizontal
     polarMax: Math.PI * 0.62,
-    cerca: 0.55,                  // fracciones de la distancia encuadrada
+    // Fracciones de la distancia encuadrada. 0.22 deja el encuadre en una
+    // balda aproximadamente: acercarse a leer los lomos es media razón de
+    // que exista el zoom, y con 0.55 te quedabas mirando el mueble entero.
+    cerca: 0.22,
     lejos: 1.6
 };
 
@@ -606,11 +633,26 @@ function crearControles(camara, dom, centro, distancia) {
     const c = new THREE.OrbitControls(camara, dom);
     c.target.copy(centro);
 
-    // Desplazar lateralmente solo serviría para sacar el mueble de cuadro.
-    c.enablePan = false;
+    // Izquierda desplaza, rueda pulsada gira: navegar es lo que se hace
+    // todo el rato y se queda en el gesto principal; girar es el gesto de
+    // mirar. El botón derecho queda libre a propósito.
+    c.mouseButtons = {
+        LEFT: THREE.MOUSE.PAN,
+        MIDDLE: THREE.MOUSE.ROTATE,
+        RIGHT: null
+    };
+    c.enablePan = true;
+    c.panSpeed = 0.9;
+    // En el plano de pantalla: el mueble es una pared, y panear siguiendo
+    // el suelo lo mandaría hacia atrás en vez de hacia los lados.
+    c.screenSpacePanning = true;
+    c.rotateSpeed = 0.45;
+
+    // Queda activo para el pellizco de dos dedos, que gestiona él. La rueda
+    // la intercepta instalarNavegacion() antes de que llegue aquí, para
+    // poder acercar al cursor y no al centro.
     c.enableZoom = true;
     c.zoomSpeed = 0.8;
-    c.rotateSpeed = 0.45;
 
     c.minDistance = distancia * LIMITES_ORBITA.cerca;
     c.maxDistance = distancia * LIMITES_ORBITA.lejos;
@@ -622,14 +664,115 @@ function crearControles(camara, dom, centro, distancia) {
     c.enableDamping = !sinInercia();
     c.dampingFactor = 0.09;
 
-    // Un dedo gira, dos acercan. El shell es de 100dvh y no scrollea, así que
-    // el arrastre de un dedo sobre el lienzo no le quita el scroll a nadie.
+    // Un dedo desplaza —igual que el botón izquierdo—, dos dedos acercan y
+    // giran. El shell es de 100dvh y no scrollea, así que el arrastre de un
+    // dedo sobre el lienzo no le quita el scroll a nadie.
     if (THREE.TOUCH) {
-        c.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+        c.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
     }
 
     c.update();
     return c;
+}
+
+// Navegación: desplazar, y acercar DONDE APUNTA EL CURSOR.
+//
+// OrbitControls acerca siempre hacia su `target`, es decir hacia el centro, lo
+// que en un mueble ancho significa que para mirar de cerca una balda de la
+// esquina tienes que acercarte al medio y luego arrastrar hasta ella. La
+// versión de three que usamos (r147) no trae `zoomToCursor` —llegó después—,
+// así que la rueda se maneja aquí.
+//
+// El truco es escalar la escena alrededor del punto que hay bajo el cursor:
+// si cámara y target se acercan a ese punto en la misma proporción, el punto
+// se queda clavado en pantalla y la distancia baja. Eso es exactamente lo que
+// significa "acercar ahí".
+function instalarNavegacion(contenedor, camara, escena, mueble, controles, alCambiar) {
+    if (!controles) return { limitar() {}, destruir() {} };
+
+    // Topes del paneo: la caja del MUEBLE con holgura. Medir la escena daría
+    // los límites de la pared, que es enorme, y no sujetarían nada.
+    const caja = new THREE.Box3().setFromObject(mueble);
+    const holgura = caja.getSize(new THREE.Vector3()).multiplyScalar(0.12);
+    const minTarget = caja.min.clone().sub(holgura);
+    const maxTarget = caja.max.clone().add(holgura);
+
+    const rayo = new THREE.Raycaster();
+    const puntero = new THREE.Vector2();
+    const plano = new THREE.Plane();
+    const normal = new THREE.Vector3();
+    const destino = new THREE.Vector3();
+    const previo = new THREE.Vector3();
+    const salto = new THREE.Vector3();
+
+    // Mantiene el target dentro del mueble. La cámara se mueve el mismo delta
+    // para que el encuadre no pegue un tirón: el paneo simplemente topa.
+    function limitar() {
+        previo.copy(controles.target);
+        controles.target.clamp(minTarget, maxTarget);
+        salto.subVectors(controles.target, previo);
+        if (salto.lengthSq() > 0) camara.position.add(salto);
+    }
+
+    function alRueda(evento) {
+        evento.preventDefault();
+        // En fase de captura sobre el contenedor: así el listener propio de
+        // OrbitControls, que está en el canvas, no llega a verlo. Su zoom
+        // sigue activo para el pellizco de dos dedos, que sí gestiona él.
+        evento.stopPropagation();
+
+        const c = contenedor.getBoundingClientRect();
+        puntero.x = ((evento.clientX - c.left) / c.width) * 2 - 1;
+        puntero.y = -((evento.clientY - c.top) / c.height) * 2 + 1;
+        rayo.setFromCamera(puntero, camara);
+
+        // Punto bajo el cursor: lo primero que toque el rayo. Si el cursor
+        // está sobre el vacío, un plano que pasa por el target.
+        const golpes = rayo.intersectObjects(escena.children, true);
+        if (golpes.length) {
+            destino.copy(golpes[0].point);
+        } else {
+            camara.getWorldDirection(normal);
+            plano.setFromNormalAndCoplanarPoint(normal, controles.target);
+            if (!rayo.ray.intersectPlane(plano, destino)) return;
+        }
+
+        const distancia = camara.position.distanceTo(controles.target);
+        if (distancia <= 0) return;
+
+        const paso = evento.deltaY < 0 ? 0.86 : 1 / 0.86;
+        const nueva = Math.min(Math.max(distancia * paso, controles.minDistance),
+                               controles.maxDistance);
+        const factor = nueva / distancia;
+        if (Math.abs(factor - 1) < 0.0005) return;   // ya está en el tope
+
+        camara.position.sub(destino).multiplyScalar(factor).add(destino);
+        controles.target.sub(destino).multiplyScalar(factor).add(destino);
+
+        limitar();
+        controles.update();
+        alCambiar?.();
+    }
+
+    // El botón central dispara el autoscroll de Chrome —el widget de las
+    // cuatro flechas—, que se comería el arrastre de giro. OrbitControls no
+    // lo frena: no llama a preventDefault en pointerdown. Va en captura
+    // para llegar antes que nadie; prevenir el pointerdown suprime además
+    // el mousedown de compatibilidad, que es el que lo desencadena.
+    function alBajarCentral(evento) {
+        if (evento.button === 1) evento.preventDefault();
+    }
+
+    contenedor.addEventListener('wheel', alRueda, { passive: false, capture: true });
+    contenedor.addEventListener('pointerdown', alBajarCentral, { capture: true });
+
+    return {
+        limitar,
+        destruir() {
+            contenedor.removeEventListener('wheel', alRueda, { capture: true });
+            contenedor.removeEventListener('pointerdown', alBajarCentral, { capture: true });
+        }
+    };
 }
 
 // ----------------------------------------
@@ -645,26 +788,38 @@ function crearControles(camara, dom, centro, distancia) {
 
 let vistaMuro = null;   // { theta, phi, fraccion }
 
-function guardarVistaMuro(camara, centro, distancia) {
+function guardarVistaMuro(camara, controles, centro, distancia) {
+    const objetivo = controles ? controles.target : centro;
     const esf = new THREE.Spherical().setFromVector3(
-        new THREE.Vector3().subVectors(camara.position, centro)
+        new THREE.Vector3().subVectors(camara.position, objetivo)
     );
     vistaMuro = {
         theta: esf.theta,
         phi: esf.phi,
-        fraccion: distancia > 0 ? esf.radius / distancia : 1
+        fraccion: distancia > 0 ? esf.radius / distancia : 1,
+        // Hacia dónde se ha desplazado, también en fracciones: si el filtro
+        // deja menos baldas el mueble encoge y un desplazamiento en unidades
+        // absolutas apuntaría a otro sitio.
+        desvio: distancia > 0
+            ? new THREE.Vector3().subVectors(objetivo, centro).divideScalar(distancia)
+            : new THREE.Vector3()
     };
 }
 
-function aplicarVistaMuro(camara, centro, distancia) {
+function aplicarVistaMuro(camara, controles, centro, distancia) {
     if (!vistaMuro) return false;
+
+    const objetivo = centro.clone().add(
+        (vistaMuro.desvio || new THREE.Vector3()).clone().multiplyScalar(distancia)
+    );
     const esf = new THREE.Spherical(
         distancia * vistaMuro.fraccion,
         vistaMuro.phi,
         vistaMuro.theta
     );
-    camara.position.setFromSpherical(esf).add(centro);
-    camara.lookAt(centro);
+    camara.position.setFromSpherical(esf).add(objetivo);
+    camara.lookAt(objetivo);
+    if (controles) controles.target.copy(objetivo);
     return true;
 }
 
@@ -685,6 +840,9 @@ function ajustarEntorno(escena) {
         if (!obj.material) return;
         const materiales = Array.isArray(obj.material) ? obj.material : [obj.material];
         materiales.forEach(m => {
+            // Quien se haya fijado su propio nivel manda: esta pasada corre
+            // después de construir la habitación y le pisaba el suyo.
+            if (m.userData?.entornoFijo) return;
             if ('envMapIntensity' in m) {
                 m.envMapIntensity = FUERZA_ENTORNO;
                 m.needsUpdate = true;
@@ -693,8 +851,11 @@ function ajustarEntorno(escena) {
     });
 }
 
-function encuadrarEscena(camara, escena, margen) {
-    const caja = new THREE.Box3().setFromObject(escena);
+function encuadrarEscena(camara, objeto, margen) {
+    // OJO: mide el MUEBLE, no la escena. Desde que hay pared y suelo, medir
+    // la escena entera dispararía la caja envolvente y la cámara se iría
+    // hasta dejar el mueble del tamaño de un sello.
+    const caja = new THREE.Box3().setFromObject(objeto);
     if (caja.isEmpty()) return { centro: new THREE.Vector3(), dist: 60 };
 
     const centro = caja.getCenter(new THREE.Vector3());
@@ -712,6 +873,148 @@ function encuadrarEscena(camara, escena, margen) {
     camara.updateProjectionMatrix();
     return { centro, dist };
 }
+
+// ----------------------------------------
+// La habitación
+// ----------------------------------------
+// Pared y suelo. Lo que más aportan no son los planos en sí, sino que el
+// mueble por fin proyecte su sombra sobre algo: sin nada detrás ni debajo, un
+// objeto no parece estar en ningún sitio, parece recortado.
+//
+// Van a la escena, NO al grupo `mueble`. Quien los meta dentro del mueble
+// romperá el encuadre de cámara y los topes del paneo, que miden esa caja.
+
+function texturaPared(colorBase) {
+    const lienzo = document.createElement('canvas');
+    lienzo.width = 32;
+    lienzo.height = 256;
+    const ctx = lienzo.getContext('2d');
+
+    // Una direccional no tiene caída, así que sin esto la pared quedaría
+    // igual de iluminada arriba que abajo y se leería como un telón.
+    const base = new THREE.Color(colorBase || token('--pared', '#0F1A1E'));
+    const arriba = base.clone().multiplyScalar(2.1);
+    const abajo = base.clone().multiplyScalar(0.55);
+
+    const g = ctx.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, '#' + arriba.getHexString());
+    g.addColorStop(0.55, '#' + base.getHexString());
+    g.addColorStop(1, '#' + abajo.getHexString());
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 32, 256);
+
+    const tex = new THREE.CanvasTexture(lienzo);
+    tex.encoding = THREE.sRGBEncoding;
+    return tex;
+}
+
+function construirHabitacion(escena, mueble, lampara) {
+    const caja = new THREE.Box3().setFromObject(mueble);
+    const tam = caja.getSize(new THREE.Vector3());
+    const centro = caja.getCenter(new THREE.Vector3());
+
+    // La pared va a todo lo ancho. El caso exigente no es el encuadre inicial
+    // sino el peor: cámara al máximo alejamiento (1.6× la distancia
+    // encuadrada, unas 400 unidades) Y girada al tope de ±30°. Ahí la cámara
+    // se desplaza lateralmente 400·sen(30°) ≈ 200, y todavía ve unas 140 más
+    // hacia ese lado: el punto visible más lejano cae a ~340 del centro.
+    //
+    // Con 7× el ancho del mueble la semianchura era 260 y asomaba el negro.
+    // Un plano son dos triángulos, así que pasarse no cuesta nada y quedarse
+    // corto se ve al instante.
+    const ancho = Math.max(tam.x * 14, 1000);
+    const alto = Math.max(tam.y * 5, 750);
+
+    // Se comparte entre pared y suelo: los dos enmarcan y ninguno compite con
+    // el mueble.
+    const acabado = extra => Object.assign({
+        roughness: 0.94,
+        metalness: 0,
+        // ajustarEntorno() corre después de esto y pondría el entorno al nivel
+        // del resto, encendiendo la pared más que el propio mueble. La marca
+        // es lo que hace que respete este valor.
+        envMapIntensity: 0.12,
+        userData: { entornoFijo: true }
+    }, extra);
+
+    const pared = new THREE.Mesh(
+        new THREE.PlaneGeometry(ancho, alto),
+        new THREE.MeshStandardMaterial(acabado({ map: texturaPared(token('--pared', '#0F1A1E')) }))
+    );
+    pared.position.set(centro.x, centro.y, caja.min.z - 10);
+    pared.receiveShadow = true;
+    escena.add(pared);
+
+    // Un plano horizontal recibe la luz cenital casi de frente, mientras que
+    // la pared la recibe rasante: con el mismo color, el suelo sale mucho más
+    // encendido y vuelve a leerse como una repisa clara bajo el mueble. Se
+    // compensa oscureciéndolo aparte, no bajando la luz de toda la escena.
+    //
+    // Y va bien por debajo de la balda inferior: pegado a ella parecía otra
+    // tabla más.
+    const suelo = new THREE.Mesh(
+        new THREE.PlaneGeometry(ancho, ancho),
+        new THREE.MeshStandardMaterial(acabado({
+            color: new THREE.Color(token('--suelo', '#0A1114')).multiplyScalar(0.45)
+        }))
+    );
+    suelo.rotation.x = -Math.PI / 2;
+    suelo.position.set(centro.x, caja.min.y - 42, caja.max.z + tam.z * 0.6);
+    suelo.receiveShadow = true;
+    escena.add(suelo);
+
+    // El frustum de sombra tiene que abarcar el mueble MÁS la pared y el suelo.
+    // Si se queda corto, la sombra aparece cortada por una recta a media pared,
+    // que es peor que no tener sombra. No se escala con `ancho`, que ahora es
+    // enorme: basta con cubrir el mueble y su sombra proyectada.
+    const alcance = Math.max(tam.x, tam.y) * 0.75 + 45;
+    lampara.shadow.camera.left = -alcance;
+    lampara.shadow.camera.right = alcance;
+    lampara.shadow.camera.top = alcance;
+    lampara.shadow.camera.bottom = -alcance;
+    lampara.shadow.camera.far = alcance * 3.5;
+    lampara.shadow.camera.updateProjectionMatrix();
+
+    // La lámpara apunta al mueble: por defecto mira al origen, y con cinco
+    // baldas el mueble baja bastante por debajo de él.
+    lampara.target.position.copy(centro);
+    escena.add(lampara.target);
+}
+
+// Degradado que finge que el lomo es curvo: oscuro en los cantos, claro hacia
+// el centro. Se perdió cuando el rótulo pasó a un plano transparente y la
+// textura dejó de pintar el fondo; sin él la cara del lomo es color plano.
+//
+// Va sobre el plano del rótulo y no en el `map` del material porque
+// RoundedBoxGeometry reparte las UV sobre la forma redondeada: un mapa en el
+// material saldría estirado por las esquinas. Es la misma razón por la que el
+// título ya vive en un plano.
+// Gris, no negro translúcido: esto va como `map` del material, y `map`
+// MULTIPLICA al color del libro. Blanco = no toca nada, gris = oscurece.
+// Así el canto cae y el centro conserva su color.
+function texturaCurvatura() {
+    return texturaCacheada('curvatura', () => {
+        const lienzo = document.createElement('canvas');
+        lienzo.width = 128;
+        lienzo.height = 4;
+        const ctx = lienzo.getContext('2d');
+
+        const g = ctx.createLinearGradient(0, 0, 128, 0);
+        g.addColorStop(0, '#8f8f8f');
+        g.addColorStop(0.18, '#d8d8d8');
+        g.addColorStop(0.42, '#ffffff');
+        g.addColorStop(0.72, '#e0e0e0');
+        g.addColorStop(1, '#8a8a8a');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 128, 4);
+
+        const tex = new THREE.CanvasTexture(lienzo);
+        tex.encoding = THREE.sRGBEncoding;
+        tex.anisotropy = ANISOTROPIA;
+        return tex;
+    });
+}
+
 
 // ----------------------------------------
 // Piezas del mueble
@@ -736,9 +1039,12 @@ function construirLibro(libro, acentoHex, conTexto) {
 
     const grupo = new THREE.Group();
 
+    // Rugosidad por libro: tela mate en un extremo, sobrecubierta satinada
+    // en el otro. Con los 97 a 0.74 la fila brillaba como una sola pieza.
     const materialTapa = new THREE.MeshStandardMaterial({
         color: color,
-        roughness: 0.74,
+        map: texturaCurvatura(),
+        roughness: 0.55 + hashEstante(libro.id + '|acabado') * 0.40,
         metalness: 0.03
     });
 
@@ -777,6 +1083,8 @@ function construirLibro(libro, acentoHex, conTexto) {
     // cara plana ya no corresponde 1:1 con la textura y el título salía
     // recortado por los lados. Con un plano encima se controla exacto, y de
     // paso el texto puede ir a más resolución que el resto del libro.
+    // El plano solo existe si hay título que poner. La curvatura ya la da el
+    // material de la tapa, sin malla extra ni transparencia.
     if (conTexto) {
         const rotulo = new THREE.Mesh(
             new THREE.PlaneGeometry(grosor * 0.88, alto * 0.94),
@@ -877,6 +1185,10 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
     const FONDO = 14;
     const SEPARACION = 30;
 
+    // El mueble va en su propio grupo, aparte de la pared y el suelo. Todo lo
+    // que mide (encuadre de cámara, topes del paneo) mide ESTO, no la escena.
+    const mueble = new THREE.Group();
+
     const grupos = [];
     const librosMesh = [];
 
@@ -939,15 +1251,22 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
             x += g + 0.32;
         });
 
-        escena.add(grupo);
+        mueble.add(grupo);
         grupos.push(grupo);
     });
 
+    escena.add(mueble);
+    construirHabitacion(escena, mueble, ctx.lampara);
     ajustarEntorno(escena);
-    const enc = encuadrarEscena(camara, escena, 1.10);
-    aplicarVistaMuro(camara, enc.centro, enc.dist);
 
+    const enc = encuadrarEscena(camara, mueble, 1.10);
     const controles = crearControles(camara, ctx.renderer.domElement, enc.centro, enc.dist);
+    const navegacion = instalarNavegacion(contenedor, camara, escena, mueble, controles,
+                                          () => ctx.pedirRender());
+
+    // La vista se restaura DESPUÉS de crear los controles: necesita fijar
+    // también su target, no solo la posición de la cámara.
+    if (aplicarVistaMuro(camara, controles, enc.centro, enc.dist)) controles?.update();
 
     // El encuadre automático solo manda hasta que el usuario toca el mueble.
     // Después, un cambio de tamaño de ventana solo ajusta el aspect ratio —que
@@ -955,7 +1274,7 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
     let usuarioMovio = !!vistaMuro;
     ctx.fijarGanchoResize(() => {
         if (usuarioMovio) return;
-        const e = encuadrarEscena(camara, escena, 1.10);
+        const e = encuadrarEscena(camara, mueble, 1.10);
         controles?.target.copy(e.centro);
         controles?.update();
     });
@@ -1086,7 +1405,7 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
         aCoordenadas(e);
         if (tocado()) return;          // solo sobre el fondo
 
-        const e2 = encuadrarEscena(camara, escena, 1.10);
+        const e2 = encuadrarEscena(camara, mueble, 1.10);
         if (controles) {
             controles.target.copy(e2.centro);
             controles.update();
@@ -1111,12 +1430,14 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
         controles.addEventListener('end', () => {
             girando = false;
             contenedor.classList.remove('girando');
-            guardarVistaMuro(camara, enc.centro, enc.dist);
+            guardarVistaMuro(camara, controles, enc.centro, enc.dist);
         });
-        // La rueda no emite start/end: la vista se guarda también al cambiar.
         controles.addEventListener('change', () => {
             usuarioMovio = true;
-            guardarVistaMuro(camara, enc.centro, enc.dist);
+            // El paneo puede llevarse el mueble fuera de cuadro: se topa aquí,
+            // moviendo cámara y target a la vez para que no dé un tirón.
+            navegacion.limitar();
+            guardarVistaMuro(camara, controles, enc.centro, enc.dist);
             animar();
         });
         contenedor.classList.add('orbitable');
@@ -1140,6 +1461,7 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
             contenedor.removeEventListener('click', alHacerClick);
             contenedor.removeEventListener('dblclick', alDobleClick);
             contenedor.classList.remove('orbitable', 'girando');
+            navegacion.destruir();
             if (controles) controles.dispose();
             ctx.destruir();
         },
@@ -1190,6 +1512,10 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
         if (!grupos.has(clave)) grupos.set(clave, []);
         grupos.get(clave).push(l);
     });
+
+    // El mueble va en su propio grupo, aparte de la pared y el suelo. Todo lo
+    // que mide (encuadre de cámara, topes del paneo) mide ESTO, no la escena.
+    const mueble = new THREE.Group();
 
     const librosMesh = [];
     const acento = tema?.color || token('--laton', '#C9A227');
@@ -1258,18 +1584,23 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
                 x += g + 0.34;
             });
 
-            escena.add(grupo);
+            mueble.add(grupo);
             fila++;
         });
     }
 
+    escena.add(mueble);
+    construirHabitacion(escena, mueble, ctx.lampara);
     ajustarEntorno(escena);
-    const enc = encuadrarEscena(camara, escena, 1.16);
+
+    const enc = encuadrarEscena(camara, mueble, 1.16);
 
     // Mismos límites que el muro: el mueble se comporta igual en los dos
     // sitios. La vista del modal NO se persiste — cada balda se abre de
     // frente, que es como quieres verla al entrar.
     const controles = crearControles(camara, ctx.renderer.domElement, enc.centro, enc.dist);
+    const navegacion = instalarNavegacion(contenedor, camara, escena, mueble, controles,
+                                          () => ctx.pedirRender());
     if (controles) contenedor.classList.add('orbitable');
 
     // ---- interacción (misma mecánica que el muro)
@@ -1365,7 +1696,10 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
             girando = false;
             contenedor.classList.remove('girando');
         });
-        controles.addEventListener('change', animar);
+        controles.addEventListener('change', () => {
+            navegacion.limitar();
+            animar();
+        });
     }
 
     contenedor.addEventListener('pointerdown', alBajar);
@@ -1383,6 +1717,7 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
             contenedor.removeEventListener('pointerleave', alSalir);
             contenedor.removeEventListener('click', alHacerClick);
             contenedor.classList.remove('orbitable', 'girando');
+            navegacion.destruir();
             if (controles) controles.dispose();
             ctx.destruir();
         },

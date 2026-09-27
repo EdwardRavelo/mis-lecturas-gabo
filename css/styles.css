@@ -63,6 +63,14 @@
     --laton: #C9A227;
     --tema-acento: #C9A227;
 
+    /* La habitación donde está el mueble: pared de fondo y suelo. Azul
+       petróleo muy oscuro, a propósito: contra el nogal cálido y el latón
+       hace contraste de temperatura, que es lo que saca a una escena oscura
+       de lo turbio. Con todo del mismo lado del espectro, el 3D se veía
+       monocromo. */
+    --pared: #0F1A1E;
+    --suelo: #0A1114;
+
     /* Maderas del mueble. Las lee estante3d.js con token(), de modo que el
        3D no repite un hex y cambia con la paleta. */
     --madera-clara: #7A5335;

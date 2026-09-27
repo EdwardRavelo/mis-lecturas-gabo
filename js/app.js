@@ -529,7 +529,7 @@ function crearLeyendaEstante(visibles) {
         '<span class="estante-leyenda-valor">' + f.valor + '</span>' +
         '</span>'
     ).join('') +
-    '<span class="estante-leyenda-pista">A todo color, lo leído · pulsa una balda para abrirla</span>';
+    '<span class="estante-leyenda-pista">Arrastra para moverte · rueda para acercar · pulsa la rueda para girar</span>';
     return el;
 }
 
