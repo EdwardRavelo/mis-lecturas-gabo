@@ -207,6 +207,47 @@ The signature component, and since the cut of 2026-09-26 the **only** view: no c
 
 6. **`estanteDisponible` is the kill switch**, false when `THREE` is missing or the browser gives no WebGL context. `montarMuro()` / `montarEstanteModal()` then return false and `app.js` paints `crearEstantePlano()` instead — the same spines, flat, fully usable. The availability rules in this file are technical, not aesthetic: the redesign lifted the visual invariants, not the rule that the app survives a dead CDN.
 
+### Turning it: drag to rotate, wheel to zoom
+
+Both scenes take `OrbitControls` through `crearControles()`, with the same limits so the
+furniture behaves the same in the wall and in the modal: ±30° of azimuth, ±20° around the
+horizontal, and 0.55×–1.6× the fitted distance. Panning is off — sliding sideways only takes
+the furniture out of frame.
+
+**The camera orbits; the furniture does not turn.** That is what lets the shadow map be frozen
+(`congelarSombras()`): nothing in the scene moves while you drag, so there is nothing to
+recompute. A turntable would rebuild a 2048² shadow map every frame of the gesture. The one
+case that *does* move something is a book's hover tween, and the animation loop asks for a
+shadow update only on those frames.
+
+The limits are not timidity. The furniture is planks plus one thin back panel per shelf — no
+sides, no top, no bottom. Past roughly 30° you start seeing that there is no cabinet there.
+Widening the angle means building a carcass first.
+
+**Four things this breaks if you touch it carelessly:**
+
+1. **A drag must not open a shelf.** Both scenes record the `pointerdown` position and drop the
+   `click` if the pointer travelled more than 4px. The threshold is in pixels, not
+   milliseconds, so a slow short drag still counts as a click. Without it, letting go after a
+   rotation opens whatever ended up under the cursor.
+2. **Hover is suspended between `start` and `end`.** Otherwise the raycast fires ~60 times a
+   second through the drag and the tooltip strobes.
+3. **Damping needs `update()` every frame.** `OrbitControls` only carries the inertia forward
+   while something calls `update()`; the `change` listener re-renders but does not advance it.
+   The existing `animar()` loop hosts it and keeps running while `update()` returns true. This
+   was already broken in the modal before the wall got controls — the spin stopped dead on
+   release.
+4. **`renderizarLibros()` rebuilds the wall on every keystroke**, so the angle has to survive
+   it. `vistaMuro` keeps theta, phi and the distance **as a fraction** of the fitted one —
+   absolute distance would be wrong, because the fit depends on how many shelves the filter
+   left visible. `encuadrarEscena()` therefore returns `{ centro, dist }`, not just a point.
+
+Auto-fit on resize only applies until the first interaction; afterwards a window resize just
+updates the aspect ratio instead of yanking the camera back to the front. Double-clicking the
+background resets — and it clears `vistaMuro` *after* calling `controles.update()`, because
+that call fires `change` synchronously and the handler there would otherwise immediately save
+the view again.
+
 ### Accessibility is not optional here
 
 A `<canvas>` is opaque to the keyboard, to screen readers and to Ctrl+F, and the theme and subtema names are **painted into textures**, so they do not exist as text anywhere else. `crearEspejoEstante()` renders the whole piece of furniture as real DOM — a visually-hidden but focusable list of buttons in the same order. Tab walks the books, focus pulls out the matching 3D book (`enfocarLibroEnMuro` / `enfocarLibroEnModal`), Enter opens the detail. It is clipped with `clip-path`, never `display: none`, which would take it out of the tab order — the whole point.
@@ -220,6 +261,18 @@ Wall spines also carry no text — at 16px wide none would be legible, and it wo
 Spine thickness comes from `paginas` (1.15 when null, which is most of the catalogue). Height and hue jitter come from `hashEstante(id)` — a hash, never `Math.random()`, because `renderizarLibros()` rebuilds the furniture on every filter keystroke and random heights would make the books dance. Spine height is capped at 18.5 against a 28-unit back panel: the top third is reserved for the shelf label, and raising the cap puts the tallest book through the theme's name.
 
 The label sits on the **back panel**, not on the plank edge where a real shelf would carry it. The plank edge is 1.7 units against 74 of width — about twelve screen pixels — and nothing legible fits there.
+
+### Colour is how much you have read
+
+A spine keeps its theme's colour in proportion to how far the reading got: `CROMA_POR_ESTADO` scales the saturation by 1 for `Leído`, 0.45 for `Leyendo` and 0.10 for `Pendiente`. The point is the glance — a wall that is mostly grey is a wall of books you have not read yet.
+
+Three things about it are deliberate:
+
+- **Lightness does not change with state, only chroma.** If unread books were darker too they would sink into the back panel and you would stop counting them. The only difference is colour.
+- **`Pendiente` is 0.10, not 0.** A trace of hue leaves a *warm* grey that belongs to the room — `#5A5D68` under a blue theme, `#615F52` under amber. At exactly zero the furniture reads as a black-and-white photo pasted inside a colour scene.
+- **The saturation jitter is applied before the state factor, not after**, so two grey books are still not identical to each other and the shelf keeps its texture.
+
+This is a *second* encoding of state, not the only one. The tejuelo dot still carries the exact `--leido` / `--leyendo` / `--pendiente` colour, and the legend and the tooltip name it in words, so no single book's state ever depends on reading its saturation.
 
 State shows as a **tejuelo**: the shelfmark label a library glues to the foot of a spine — matte, bordered, with a dot in the state colour. It replaced a saturated band across the whole lower spine that read as a fluorescent sticker. The dot is deliberately large: in the wall it is the only per-book state signal there is, and at 16px of spine width a subtle one disappears.
 

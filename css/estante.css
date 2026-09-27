@@ -400,3 +400,21 @@
 @media (prefers-reduced-motion: reduce) {
     .estante-pista { transition: none; }
 }
+
+/* ----------------------------------------
+   Girar el mueble
+   ----------------------------------------
+   El cursor es lo único que anuncia que la escena se puede arrastrar: no hay
+   ningún control visible, a propósito. Sobre un libro manda `pointer`, que lo
+   pone estante3d.js en línea y gana a esto por especificidad de estilo. */
+
+.estante-escena.orbitable { cursor: grab; }
+.estante-escena.orbitable.girando { cursor: grabbing; }
+
+/* Mientras se gira no queremos que el navegador intente seleccionar texto del
+   espejo accesible ni disparar gestos propios del táctil. */
+.estante-escena.orbitable {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}

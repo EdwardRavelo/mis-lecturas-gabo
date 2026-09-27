@@ -92,15 +92,41 @@ function alturaLomo(libro) {
 
 // Color del lomo: el acento del tema, desviado por libro de forma
 // determinista para que la balda tenga vida sin dejar de leerse como un tema.
+// Cuánto del color del tema conserva un libro según su estado. Es la capa
+// que deja leer el avance de un vistazo: el color se gana terminando.
+//
+// No sustituye al tejuelo. El punto de estado sigue llevando el color exacto
+// de --leido / --leyendo / --pendiente, así que el estado de un libro concreto
+// nunca depende solo de lo saturado que esté su lomo: esto es una segunda
+// codificación, redundante a propósito, para la lectura a distancia.
+//
+// Pendiente no baja a cero: un resto de tono deja un gris CÁLIDO, del color
+// de la habitación. A cero exacto el mueble parece una foto en blanco y negro
+// pegada dentro de una escena en color.
+const CROMA_POR_ESTADO = {
+    'Leído': 1,
+    'Leyendo': 0.45,
+    'Pendiente': 0.10
+};
+
 function colorLomo(libro, acentoHex) {
     const base = new THREE.Color(acentoHex || '#C9A227');
     const hsl = { h: 0, s: 0, l: 0 };
     base.getHSL(hsl);
     const n = hashEstante(libro.id + '|lomo');
     const m = hashEstante(libro.id + '|luz');
+
+    // El jitter de saturación se calcula igual para todos y DESPUÉS se atenúa,
+    // para que dos libros grises sigan sin ser idénticos entre sí.
+    const croma = Math.max(0.30, Math.min(0.82, hsl.s + (m - 0.5) * 0.26));
+    const factor = CROMA_POR_ESTADO[libro.estado] ?? CROMA_POR_ESTADO['Pendiente'];
+
     return new THREE.Color().setHSL(
         (hsl.h + (n - 0.5) * 0.10 + 1) % 1,
-        Math.max(0.30, Math.min(0.82, hsl.s + (m - 0.5) * 0.26)),
+        croma * factor,
+        // La luminosidad NO cambia con el estado: lo único que separa un libro
+        // leído de uno pendiente es el color. Si además variara el brillo, los
+        // pendientes se hundirían en el fondo y dejarías de contarlos.
         Math.max(0.13, Math.min(0.38, hsl.l * 0.72 + (n - 0.5) * 0.16))
     );
 }
@@ -528,8 +554,122 @@ function crearEscenaEstante(contenedor, opciones) {
 
     function fijarGanchoResize(fn) { ganchoResize = fn; }
 
+    // Recalcula el mapa de sombras una vez más y lo deja congelado. Girar la
+    // cámara no cambia ninguna sombra —no se mueve nada en la escena—, así
+    // que rehacerlo en cada fotograma del arrastre sería tirar el
+    // presupuesto justo cuando hace falta fluidez. Quien mueva un objeto de
+    // verdad (el tween de un libro) vuelve a pedirlo con needsUpdate.
+    function congelarSombras() {
+        lampara.shadow.autoUpdate = false;
+        lampara.shadow.needsUpdate = true;
+    }
+
     return { escena, camara, renderer, lampara, pedirRender, redimensionar,
-             registrar, destruir, fijarGanchoResize };
+             registrar, destruir, fijarGanchoResize, congelarSombras };
+}
+
+// ----------------------------------------
+// Órbita: girar e acercar
+// ----------------------------------------
+// Se mueve la cámara alrededor del mueble, no el mueble delante de la cámara.
+// Además de ser lo que espera cualquiera en un visor 3D, tiene una
+// consecuencia que decide el asunto: orbitando la cámara NADA se mueve en la
+// escena, así que el mapa de sombras se puede congelar. Con el mueble girando
+// bajo una luz fija habría que recalcularlo en cada fotograma del arrastre,
+// con 2048² de mapa y un centenar de libros.
+//
+// El recorrido va limitado a propósito: el mueble son tablas y un panel
+// trasero por balda, sin laterales ni techo ni suelo. Pasando de unos 30° se
+// vería que por detrás no hay nada.
+
+const LIMITES_ORBITA = {
+    azimut: 0.52,                 // ±30°
+    polarMin: Math.PI * 0.38,     // ±20° alrededor de la horizontal
+    polarMax: Math.PI * 0.62,
+    cerca: 0.55,                  // fracciones de la distancia encuadrada
+    lejos: 1.6
+};
+
+// La inercia es movimiento que el usuario no pidió: con movimiento reducido
+// se apaga. El bloque de animations.css no llega hasta aquí, porque esto no
+// lo mueve el CSS.
+function sinInercia() {
+    return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
+function crearControles(camara, dom, centro, distancia) {
+    if (typeof THREE.OrbitControls !== 'function') {
+        console.warn('[Estante] OrbitControls no cargó; el mueble no se podrá girar.');
+        return null;
+    }
+
+    const c = new THREE.OrbitControls(camara, dom);
+    c.target.copy(centro);
+
+    // Desplazar lateralmente solo serviría para sacar el mueble de cuadro.
+    c.enablePan = false;
+    c.enableZoom = true;
+    c.zoomSpeed = 0.8;
+    c.rotateSpeed = 0.45;
+
+    c.minDistance = distancia * LIMITES_ORBITA.cerca;
+    c.maxDistance = distancia * LIMITES_ORBITA.lejos;
+    c.minAzimuthAngle = -LIMITES_ORBITA.azimut;
+    c.maxAzimuthAngle = LIMITES_ORBITA.azimut;
+    c.minPolarAngle = LIMITES_ORBITA.polarMin;
+    c.maxPolarAngle = LIMITES_ORBITA.polarMax;
+
+    c.enableDamping = !sinInercia();
+    c.dampingFactor = 0.09;
+
+    // Un dedo gira, dos acercan. El shell es de 100dvh y no scrollea, así que
+    // el arrastre de un dedo sobre el lienzo no le quita el scroll a nadie.
+    if (THREE.TOUCH) {
+        c.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+    }
+
+    c.update();
+    return c;
+}
+
+// ----------------------------------------
+// Vista persistida del muro
+// ----------------------------------------
+// renderizarLibros() desmonta y reconstruye el muro entero en cada tecla del
+// buscador, en cada filtro y al cerrar una balda. Sin guardar el ángulo, girar
+// el mueble y teclear una letra lo devolvería al frente.
+//
+// Se guarda en esféricas y con la distancia como FRACCIÓN de la encuadrada,
+// no en absoluto: el encuadre depende de cuántas baldas quedan visibles, y al
+// filtrar el mueble se hace más pequeño.
+
+let vistaMuro = null;   // { theta, phi, fraccion }
+
+function guardarVistaMuro(camara, centro, distancia) {
+    const esf = new THREE.Spherical().setFromVector3(
+        new THREE.Vector3().subVectors(camara.position, centro)
+    );
+    vistaMuro = {
+        theta: esf.theta,
+        phi: esf.phi,
+        fraccion: distancia > 0 ? esf.radius / distancia : 1
+    };
+}
+
+function aplicarVistaMuro(camara, centro, distancia) {
+    if (!vistaMuro) return false;
+    const esf = new THREE.Spherical(
+        distancia * vistaMuro.fraccion,
+        vistaMuro.phi,
+        vistaMuro.theta
+    );
+    camara.position.setFromSpherical(esf).add(centro);
+    camara.lookAt(centro);
+    return true;
+}
+
+function olvidarVistaMuro() {
+    vistaMuro = null;
 }
 
 // Encuadra la camara sobre lo que HAY en la escena, no sobre cuantas baldas
@@ -555,7 +695,7 @@ function ajustarEntorno(escena) {
 
 function encuadrarEscena(camara, escena, margen) {
     const caja = new THREE.Box3().setFromObject(escena);
-    if (caja.isEmpty()) return new THREE.Vector3();
+    if (caja.isEmpty()) return { centro: new THREE.Vector3(), dist: 60 };
 
     const centro = caja.getCenter(new THREE.Vector3());
     const tam = caja.getSize(new THREE.Vector3());
@@ -570,7 +710,7 @@ function encuadrarEscena(camara, escena, margen) {
     camara.position.set(centro.x, centro.y, centro.z + dist);
     camara.lookAt(centro);
     camara.updateProjectionMatrix();
-    return centro;
+    return { centro, dist };
 }
 
 // ----------------------------------------
@@ -804,13 +944,27 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
     });
 
     ajustarEntorno(escena);
-    encuadrarEscena(camara, escena, 1.10);
-    ctx.fijarGanchoResize(() => encuadrarEscena(camara, escena, 1.10));
+    const enc = encuadrarEscena(camara, escena, 1.10);
+    aplicarVistaMuro(camara, enc.centro, enc.dist);
+
+    const controles = crearControles(camara, ctx.renderer.domElement, enc.centro, enc.dist);
+
+    // El encuadre automático solo manda hasta que el usuario toca el mueble.
+    // Después, un cambio de tamaño de ventana solo ajusta el aspect ratio —que
+    // ya hace redimensionar() por su cuenta—, y no le tira el ángulo elegido.
+    let usuarioMovio = !!vistaMuro;
+    ctx.fijarGanchoResize(() => {
+        if (usuarioMovio) return;
+        const e = encuadrarEscena(camara, escena, 1.10);
+        controles?.target.copy(e.centro);
+        controles?.update();
+    });
 
     // ---- interacción
     const rayo = new THREE.Raycaster();
     const puntero = new THREE.Vector2();
     let resaltado = null;
+    let girando = false;
     const objetivoZ = new WeakMap();
 
     function aCoordenadas(evento) {
@@ -844,6 +998,11 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
 
     // Tween propio, sin librería: interpola hacia el objetivo y se apaga solo
     // cuando ya no queda movimiento. Nada de bucle permanente.
+    //
+    // Este mismo bucle es el que hace avanzar la inercia de los controles.
+    // OrbitControls con amortiguado necesita un update() por fotograma
+    // mientras la inercia decae; sin él, al soltar el arrastre el movimiento
+    // se corta en seco.
     let animando = false;
     function animar() {
         if (animando) return;
@@ -862,8 +1021,18 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
                     g.rotation.y = meta * 0.035;
                 }
             });
+
+            // update() devuelve true mientras la cámara siga moviéndose.
+            const camaraSeMueve = controles ? controles.update() : false;
+
+            // Las sombras están congeladas para que girar salga fluido, pero
+            // si se ha movido un LIBRO hay que rehacerlas: su sombra se
+            // quedaría clavada donde estaba.
+            if (sigue) ctx.lampara.shadow.needsUpdate = true;
+
             ctx.renderer.render(escena, camara);
-            if (sigue) {
+
+            if (sigue || camaraSeMueve) {
                 requestAnimationFrame(paso);
             } else {
                 animando = false;
@@ -873,6 +1042,9 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
     }
 
     function alMover(e) {
+        // Durante el arrastre no se resalta: serían sesenta raycasts por
+        // segundo y el tooltip iría parpadeando mientras giras.
+        if (girando) return;
         aCoordenadas(e);
         resaltar(tocado(), e);
     }
@@ -881,7 +1053,23 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
         resaltar(null);
     }
 
+    // Umbral en píxeles, no en tiempo: un arrastre lento y corto sigue siendo
+    // un click. Sin esto, soltar el ratón después de girar abriría la balda
+    // que hubiera quedado debajo del cursor.
+    const UMBRAL_ARRASTRE = 4;
+    let bajada = null;
+
+    function alBajar(e) {
+        bajada = { x: e.clientX, y: e.clientY };
+    }
+
+    function fueArrastre(e) {
+        if (!bajada) return false;
+        return Math.hypot(e.clientX - bajada.x, e.clientY - bajada.y) > UMBRAL_ARRASTRE;
+    }
+
     function alHacerClick(e) {
+        if (fueArrastre(e)) return;
         aCoordenadas(e);
         const o = tocado();
         if (!o) return;
@@ -892,18 +1080,67 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
         }
     }
 
+    // La vista persiste toda la sesión, así que hace falta una salida: sin
+    // esto un ángulo raro se queda puesto y no hay forma de deshacerlo.
+    function alDobleClick(e) {
+        aCoordenadas(e);
+        if (tocado()) return;          // solo sobre el fondo
+
+        const e2 = encuadrarEscena(camara, escena, 1.10);
+        if (controles) {
+            controles.target.copy(e2.centro);
+            controles.update();
+        }
+
+        // Se limpia DESPUÉS del update(), no antes: update() emite 'change'
+        // de forma síncrona y el manejador de ahí abajo volvería a guardar
+        // la vista y a marcar usuarioMovio, dejando el reencuadre
+        // automático apagado para siempre.
+        olvidarVistaMuro();
+        usuarioMovio = false;
+        ctx.pedirRender();
+    }
+
+    if (controles) {
+        controles.addEventListener('start', () => {
+            girando = true;
+            usuarioMovio = true;
+            resaltar(null);
+            contenedor.classList.add('girando');
+        });
+        controles.addEventListener('end', () => {
+            girando = false;
+            contenedor.classList.remove('girando');
+            guardarVistaMuro(camara, enc.centro, enc.dist);
+        });
+        // La rueda no emite start/end: la vista se guarda también al cambiar.
+        controles.addEventListener('change', () => {
+            usuarioMovio = true;
+            guardarVistaMuro(camara, enc.centro, enc.dist);
+            animar();
+        });
+        contenedor.classList.add('orbitable');
+    }
+
+    contenedor.addEventListener('pointerdown', alBajar);
     contenedor.addEventListener('pointermove', alMover);
     contenedor.addEventListener('pointerleave', alSalir);
     contenedor.addEventListener('click', alHacerClick);
+    contenedor.addEventListener('dblclick', alDobleClick);
 
     pedirRender();
+    ctx.congelarSombras();
 
     muro = {
         ctx,
         destruir() {
+            contenedor.removeEventListener('pointerdown', alBajar);
             contenedor.removeEventListener('pointermove', alMover);
             contenedor.removeEventListener('pointerleave', alSalir);
             contenedor.removeEventListener('click', alHacerClick);
+            contenedor.removeEventListener('dblclick', alDobleClick);
+            contenedor.classList.remove('orbitable', 'girando');
+            if (controles) controles.dispose();
             ctx.destruir();
         },
         // El espejo DOM llama aquí para que el foco de teclado saque el mismo
@@ -1027,28 +1264,13 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
     }
 
     ajustarEntorno(escena);
-    const centro = encuadrarEscena(camara, escena, 1.16);
-    const altoTotal = Math.max(SEPARACION, fila * SEPARACION);
+    const enc = encuadrarEscena(camara, escena, 1.16);
 
-    // Órbita muy limitada: se puede mirar el mueble de lado, nunca volcarlo.
-    let controles = null;
-    if (typeof THREE.OrbitControls === 'function') {
-        controles = new THREE.OrbitControls(camara, ctx.renderer.domElement);
-        controles.target.copy(centro);
-        controles.enableZoom = true;
-        controles.enablePan = false;
-        controles.minDistance = 34;
-        controles.maxDistance = Math.max(110, altoTotal * 1.5);
-        controles.minPolarAngle = Math.PI * 0.30;
-        controles.maxPolarAngle = Math.PI * 0.70;
-        controles.minAzimuthAngle = -0.5;
-        controles.maxAzimuthAngle = 0.5;
-        controles.enableDamping = true;
-        controles.dampingFactor = 0.08;
-        controles.rotateSpeed = 0.5;
-        controles.addEventListener('change', () => ctx.renderer.render(escena, camara));
-        controles.update();
-    }
+    // Mismos límites que el muro: el mueble se comporta igual en los dos
+    // sitios. La vista del modal NO se persiste — cada balda se abre de
+    // frente, que es como quieres verla al entrar.
+    const controles = crearControles(camara, ctx.renderer.domElement, enc.centro, enc.dist);
+    if (controles) contenedor.classList.add('orbitable');
 
     // ---- interacción (misma mecánica que el muro)
     const rayo = new THREE.Raycaster();
@@ -1091,9 +1313,14 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
                     g.rotation.y = -meta * 0.06;
                 }
             });
-            if (controles) controles.update();
+            // update() devuelve true mientras la cámara siga moviéndose. Con
+            // amortiguado, la inercia solo avanza si esto corre cada
+            // fotograma; antes solo se llamaba mientras un libro se movía y
+            // al soltar el giro se paraba de golpe.
+            const camaraSeMueve = controles ? controles.update() : false;
+            if (sigue) ctx.lampara.shadow.needsUpdate = true;
             ctx.renderer.render(escena, camara);
-            if (sigue) requestAnimationFrame(paso);
+            if (sigue || camaraSeMueve) requestAnimationFrame(paso);
             else animando = false;
         };
         requestAnimationFrame(paso);
@@ -1108,25 +1335,54 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
         animar();
     }
 
-    function alMover(e) { aCoordenadas(e); resaltar(tocado()); }
+    let girando = false;
+    let bajada = null;
+
+    function alMover(e) {
+        if (girando) return;
+        aCoordenadas(e);
+        resaltar(tocado());
+    }
     function alSalir() { resaltar(null); }
+    function alBajar(e) { bajada = { x: e.clientX, y: e.clientY }; }
+
+    // Igual que en el muro: sin umbral, soltar tras girar abriría el libro
+    // que hubiera quedado debajo del cursor.
     function alHacerClick(e) {
+        if (bajada && Math.hypot(e.clientX - bajada.x, e.clientY - bajada.y) > 4) return;
         aCoordenadas(e);
         const o = tocado();
         if (o?.userData.libroId) alPulsarLibro?.(o.userData.libroId);
     }
 
+    if (controles) {
+        controles.addEventListener('start', () => {
+            girando = true;
+            resaltar(null);
+            contenedor.classList.add('girando');
+        });
+        controles.addEventListener('end', () => {
+            girando = false;
+            contenedor.classList.remove('girando');
+        });
+        controles.addEventListener('change', animar);
+    }
+
+    contenedor.addEventListener('pointerdown', alBajar);
     contenedor.addEventListener('pointermove', alMover);
     contenedor.addEventListener('pointerleave', alSalir);
     contenedor.addEventListener('click', alHacerClick);
 
     ctx.pedirRender();
+    ctx.congelarSombras();
 
     estanteModal = {
         destruir() {
+            contenedor.removeEventListener('pointerdown', alBajar);
             contenedor.removeEventListener('pointermove', alMover);
             contenedor.removeEventListener('pointerleave', alSalir);
             contenedor.removeEventListener('click', alHacerClick);
+            contenedor.classList.remove('orbitable', 'girando');
             if (controles) controles.dispose();
             ctx.destruir();
         },

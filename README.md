@@ -23,7 +23,9 @@ Empezó como un catálogo fijo de las 18 obras de Gabriel García Márquez y hoy
 **La estantería es la interfaz**
 - Una balda por tema, con el grosor de cada lomo a escala según las páginas del libro
 - Al pulsar una balda se abre a pantalla casi completa, con los libros repartidos por subtema
+- El color mide el avance: a todo color lo leído, a media tinta lo que estás leyendo, en gris lo pendiente
 - Al pasar el cursor por un lomo, una etiqueta dice qué libro es
+- Se puede girar el mueble arrastrando y acercarse con la rueda; doble click en el fondo vuelve al frente
 - El estado de cada lectura va en un tejuelo al pie del lomo, y los recuentos en una leyenda sobre el mueble
 - Todo lo demás —buscar, filtrar, añadir, exportar, cerrar sesión— vive en el menú «···»
 - Si el navegador no da WebGL o no carga la librería, cae a un estante plano con la misma información
