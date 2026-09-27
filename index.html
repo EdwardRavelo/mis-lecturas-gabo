@@ -4,14 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Biblioteca Gabriel García Márquez</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23FBF7F0'/%3E%3Crect x='8' y='6' width='13' height='20' rx='1.5' fill='%23B57C00'/%3E%3Crect x='9.5' y='7.5' width='10' height='17' rx='1' fill='%23FBF7F0'/%3E%3Crect x='11' y='11' width='7' height='1.5' rx='0.75' fill='%231C1815' opacity='0.45'/%3E%3Crect x='11' y='14.5' width='5' height='1.5' rx='0.75' fill='%231C1815' opacity='0.45'/%3E%3Crect x='21' y='6' width='2.5' height='20' rx='1' fill='%231C1815' opacity='0.75'/%3E%3C/svg%3E">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2317120E'/%3E%3Crect x='8' y='6' width='13' height='20' rx='1.5' fill='%23C9A227'/%3E%3Crect x='9.5' y='7.5' width='10' height='17' rx='1' fill='%23F4EDE3'/%3E%3Crect x='11' y='11' width='7' height='1.5' rx='0.75' fill='%2317120E' opacity='0.5'/%3E%3Crect x='11' y='14.5' width='5' height='1.5' rx='0.75' fill='%2317120E' opacity='0.5'/%3E%3Crect x='21' y='6' width='2.5' height='20' rx='1' fill='%23F4EDE3' opacity='0.85'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/animations.css">
+    <link rel="stylesheet" href="css/estante.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Solo Fraunces (títulos) y DM Sans (texto): Syne se cargaba sin que
-         ninguna regla lo usara. -->
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,600&display=swap" rel="stylesheet">
+    <!-- Instrument Serif (display) y Plus Jakarta Sans (datos). Solo se carga
+         lo que alguna regla usa: no añadir familias sueltas "por si acaso". -->
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -66,194 +67,80 @@
     </div>
 
     <!-- ================================ -->
-    <!-- Header Mobile                   -->
+    <!-- Layout: el mueble y nada más     -->
     <!-- ================================ -->
-    <div class="mobile-header" id="mobile-header" style="display:none;">
-        <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Abrir menú">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <line x1="3" y1="6" x2="21" y2="6"/>
-                <line x1="3" y1="12" x2="21" y2="12"/>
-                <line x1="3" y1="18" x2="21" y2="18"/>
-            </svg>
-        </button>
-        <span class="mobile-header-title">Gabo</span>
-        <div class="mobile-header-user" id="mobile-header-user"></div>
-    </div>
-
-    <!-- ================================ -->
-    <!-- Layout Principal tipo Librería   -->
-    <!-- ================================ -->
+    <!-- Sin barra lateral, sin rejilla de tarjetas y sin panel de análisis:
+         la ventana entera es la estantería. Todo lo que antes ocupaba la
+         columna izquierda vive ahora dentro del menú "···". -->
     <div class="library-layout" style="display:none;">
-        <!-- Overlay sidebar mobile -->
-        <div class="sidebar-overlay" id="sidebar-overlay"></div>
-
-        <!-- Sidebar izquierdo -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="decorative-line"></div>
-                <h1 class="library-title">Diario de<br>Lecturas</h1>
-                <p class="library-subtitle">Biblioteca Personal</p>
-                <div class="decorative-butterfly">✦</div>
-            </div>
-
-            <!-- Navegación por temas -->
-            <div class="sidebar-temas">
-                <div class="temas-header">
-                    <h3 class="filter-title">Temas</h3>
-                    <button class="btn-nuevo-tema" id="btn-nuevo-tema" title="Nuevo tema">+</button>
-                </div>
-                <div class="temas-list" id="temas-list">
-                    <!-- Los temas se generan dinámicamente -->
-                </div>
-            </div>
-
-            <!-- Estadísticas Compactas -->
-            <div class="stats-compact">
-                <div class="stat-item" data-filter="Leído" title="Ver libros leídos">
-                    <span class="stat-value" id="total-leidos">0</span>
-                    <span class="stat-label">Leídos</span>
-                </div>
-                <div class="stat-item" data-filter="Leyendo" title="Ver libros en lectura">
-                    <span class="stat-value" id="total-leyendo">0</span>
-                    <span class="stat-label">Leyendo</span>
-                </div>
-                <div class="stat-item" data-filter="Pendiente" title="Ver libros pendientes">
-                    <span class="stat-value" id="total-pendientes">0</span>
-                    <span class="stat-label">Pendientes</span>
-                </div>
-                <div class="stat-item" data-filter="Todos" title="Ver todas las páginas">
-                    <span class="stat-value" id="total-paginas">0</span>
-                    <span class="stat-label">Páginas</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-value" id="promedio-dias">0</span>
-                    <span class="stat-label">Días Prom.</span>
-                </div>
-            </div>
-
-            <!-- Filtros -->
-            <div class="sidebar-filters">
-                <h3 class="filter-title">Filtrar por Estado</h3>
-                <div class="filter-buttons-vertical">
-                    <button class="filter-btn active" data-filter="Todos">Todos</button>
-                    <button class="filter-btn" data-filter="Leído">Leídos</button>
-                    <button class="filter-btn" data-filter="Leyendo">Leyendo</button>
-                    <button class="filter-btn" data-filter="Pendiente">Pendientes</button>
-                </div>
-            </div>
-
-            <!-- Búsqueda -->
-            <div class="sidebar-search">
-                <input type="text" id="search-input" class="search-input" placeholder="Buscar libro...">
-            </div>
-
-            <!-- Gráficas Compactas -->
-            <div class="sidebar-charts">
-                <div class="chart-mini">
-                    <h4 class="chart-mini-title">Reparto</h4>
-                    <div id="estado-chart"></div>
-                </div>
-            </div>
-
-            <!-- Respaldo de datos -->
-            <div class="sidebar-backup">
-                <h3 class="filter-title">Respaldo</h3>
-                <div class="backup-buttons">
-                    <button class="backup-btn" id="btn-exportar" title="Descargar una copia de tu progreso">
-                        ↓ Exportar
-                    </button>
-                    <button class="backup-btn" id="btn-importar" title="Restaurar desde un archivo JSON">
-                        ↑ Importar
-                    </button>
-                    <input type="file" id="input-importar" accept="application/json,.json" style="display:none;">
-                </div>
-            </div>
-
-            <!-- Widget de Usuario -->
-            <div class="user-menu" id="user-menu" style="display:none;">
-                <div class="user-info">
-                    <div class="user-avatar" id="user-avatar"></div>
-                    <span class="user-name" id="user-name"></span>
-                </div>
-                <button class="btn-logout" id="btn-logout" title="Cerrar sesión">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                        <polyline points="16 17 21 12 16 7"/>
-                        <line x1="21" y1="12" x2="9" y2="12"/>
-                    </svg>
-                </button>
-            </div>
-        </aside>
-
-        <!-- Contenido Principal -->
         <main class="main-content">
-
-            <!-- Sección de Libros -->
-            <section class="books-section">
-                <div class="section-header">
-                    <h2 class="section-title" id="section-title" data-text="Todas mis lecturas">Todas mis lecturas</h2>
-                    <div class="view-options">
-                        <button class="btn-nuevo-libro" id="btn-nuevas-lecturas" title="Añadir varias lecturas en una tabla">+ Varias</button>
-                        <button class="btn-nuevo-libro" id="btn-nuevo-libro" title="Añadir libro">+ Libro</button>
-                        <button class="view-btn active" data-view="grid">⊞</button>
-                        <button class="view-btn" data-view="list">☰</button>
-                    </div>
-                </div>
-                <div class="books-grid" id="books-grid">
-                    <!-- Los libros se cargarán dinámicamente aquí -->
-                </div>
-            </section>
-
-            <!-- Timeline y Análisis: panel plegable, cerrado por defecto -->
-            <section class="analysis-section" id="analysis-section">
-                <button class="analysis-toggle" id="analysis-toggle" type="button"
-                        aria-expanded="false" aria-controls="analysis-body">
-                    <span class="chevron">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <polyline points="18 15 12 9 6 15"/>
-                        </svg>
-                    </span>
-                    Timeline y análisis
-                </button>
-
-                <div class="analysis-body" id="analysis-body">
-                    <div class="tabs">
-                        <button class="tab-btn active" data-tab="timeline">Timeline</button>
-                        <button class="tab-btn" data-tab="charts">Análisis</button>
-                    </div>
-
-                    <div class="tab-content active" id="timeline-tab">
-                        <div class="timeline" id="timeline">
-                            <!-- El timeline se generará dinámicamente -->
-                        </div>
-                    </div>
-
-                    <div class="tab-content" id="charts-tab">
-                        <div class="charts-grid-compact">
-                            <!-- Progreso por tema: usa estado y tema, los dos
-                                 únicos campos que TODAS las lecturas tienen.
-                                 Las vistas temporales dependen de fechas que
-                                 la mayoría del catálogo no trae. -->
-                            <div class="chart-container-small">
-                                <h4 class="chart-title-small">Progreso por tema</h4>
-                                <div id="temas-chart"></div>
-                            </div>
-
-                            <div class="chart-container-small">
-                                <h4 class="chart-title-small">Páginas por Mes</h4>
-                                <!-- La caja da al canvas una altura FIJA. Sin ella,
-                                     con maintainAspectRatio:false el gráfico crece
-                                     sin fin: mide el contenedor, el contenedor crece
-                                     con el canvas, y vuelta a empezar. -->
-                                <div class="chart-caja">
-                                    <canvas id="pages-chart"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            <div id="estante-raiz">
+                <!-- El mueble lo monta app.js aquí -->
+            </div>
         </main>
+
+        <!-- Menú: búsqueda, filtro, altas, respaldo y sesión -->
+        <button class="menu-btn" id="menu-btn" type="button"
+                aria-haspopup="true" aria-expanded="false" aria-controls="menu-panel"
+                aria-label="Abrir menú">···</button>
+
+        <div class="menu-velo" id="menu-velo" hidden></div>
+
+        <div class="menu-panel" id="menu-panel" role="menu" hidden>
+            <div class="menu-seccion">
+                <label class="menu-titulo" for="search-input">Buscar</label>
+                <input type="text" id="search-input" class="menu-buscar"
+                       placeholder="Título o autor…" autocomplete="off">
+            </div>
+
+            <div class="menu-seccion">
+                <span class="menu-titulo">Estado</span>
+                <div class="menu-filtros">
+                    <button class="menu-filtro active" type="button" data-filter="Todos">Todos</button>
+                    <button class="menu-filtro" type="button" data-filter="Leído">Leídos</button>
+                    <button class="menu-filtro" type="button" data-filter="Leyendo">Leyendo</button>
+                    <button class="menu-filtro" type="button" data-filter="Pendiente">Pendientes</button>
+                </div>
+            </div>
+
+            <div class="menu-seccion">
+                <span class="menu-titulo">Añadir</span>
+                <button class="menu-accion" type="button" id="btn-nuevo-tema">
+                    <span class="menu-accion-icono" aria-hidden="true">▤</span> Nuevo tema
+                </button>
+                <button class="menu-accion" type="button" id="btn-nuevo-libro">
+                    <span class="menu-accion-icono" aria-hidden="true">＋</span> Una lectura
+                </button>
+                <button class="menu-accion" type="button" id="btn-nuevas-lecturas">
+                    <span class="menu-accion-icono" aria-hidden="true">≡</span> Varias lecturas
+                </button>
+                <p class="menu-nota" id="menu-nota-offline" hidden>
+                    Sin conexión solo puedes editar tu progreso: crear temas y lecturas
+                    necesita un id generado por el servidor.
+                </p>
+            </div>
+
+            <div class="menu-seccion">
+                <span class="menu-titulo">Respaldo</span>
+                <button class="menu-accion" type="button" id="btn-exportar">
+                    <span class="menu-accion-icono" aria-hidden="true">↓</span> Exportar
+                </button>
+                <button class="menu-accion" type="button" id="btn-importar">
+                    <span class="menu-accion-icono" aria-hidden="true">↑</span> Importar
+                </button>
+                <input type="file" id="input-importar" accept="application/json,.json" style="display:none;">
+            </div>
+
+            <div class="menu-seccion" id="user-menu" style="display:none;">
+                <div class="menu-usuario">
+                    <div class="menu-avatar" id="user-avatar"></div>
+                    <span class="menu-nombre" id="user-name"></span>
+                </div>
+                <button class="menu-accion peligro" type="button" id="btn-logout">
+                    <span class="menu-accion-icono" aria-hidden="true">⇥</span> Cerrar sesión
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- Modal Mejorado -->
@@ -417,7 +304,7 @@
 
                     <div class="form-group">
                         <label class="form-label" for="tema-color">Color de acento</label>
-                        <input type="color" id="tema-color" class="form-input form-input-color" value="#B57C00">
+                        <input type="color" id="tema-color" class="form-input form-input-color" value="#C9A227">
                     </div>
 
                     <button type="submit" class="btn btn-primary btn-full">Guardar tema</button>
@@ -566,12 +453,48 @@
         </div>
     </div>
 
+    <!-- ========================================
+         Modal del estante: abre una balda entera
+         ======================================== -->
+    <div class="modal" id="estante-modal">
+        <div class="modal-backdrop" id="estante-modal-backdrop"></div>
+        <div class="modal-content">
+            <button class="modal-close" id="estante-modal-close" type="button" aria-label="Cerrar estante">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+
+            <header class="estante-modal-cabecera">
+                <div>
+                    <span class="estante-modal-eyebrow">Estante</span>
+                    <h2 class="estante-modal-titulo" id="estante-modal-titulo"></h2>
+                </div>
+                <span class="estante-modal-cuenta" id="estante-modal-cuenta"></span>
+            </header>
+
+            <div class="estante-modal-cuerpo" id="estante-modal-cuerpo">
+                <!-- La escena o el respaldo plano los monta app.js aqui -->
+            </div>
+        </div>
+    </div>
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Three.js r147 es el ultimo release con build UMD y con examples/js/ no
+         modular: expone THREE como global y no obliga a type="module", que
+         rompería el modelo de ámbito global del resto de la app. -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- RoundedBoxGeometry: cantos biselados. Una arista de 90° exacta no
+         coge nunca un reflejo y el ojo lo lee como CG al instante. -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/geometries/RoundedBoxGeometry.js"></script>
+    <!-- RoomEnvironment: entorno de estudio generado en código, sin descargar
+         ningún HDR. Sin mapa de entorno, un material PBR no tiene especular. -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="js/supabase.js"></script>
     <script src="js/data.js"></script>
-    <script src="js/charts.js"></script>
+    <script src="js/estante3d.js"></script>
     <script src="js/db.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/app.js"></script>

@@ -20,10 +20,15 @@ Empezó como un catálogo fijo de las 18 obras de Gabriel García Márquez y hoy
 - Enlace al recurso, imprescindible cuando la entrada es documentación o un curso
 - Portadas automáticas desde la API de Google Books
 
-**Análisis**
-- Reparto por estado en barra apilada
-- Páginas por mes
-- Timeline cronológico de *lectura* (no de publicación), del más reciente al más antiguo
+**La estantería es la interfaz**
+- Una balda por tema, con el grosor de cada lomo a escala según las páginas del libro
+- Al pulsar una balda se abre a pantalla casi completa, con los libros repartidos por subtema
+- Al pasar el cursor por un lomo, una etiqueta dice qué libro es
+- El estado de cada lectura va en un tejuelo al pie del lomo, y los recuentos en una leyenda sobre el mueble
+- Todo lo demás —buscar, filtrar, añadir, exportar, cerrar sesión— vive en el menú «···»
+- Si el navegador no da WebGL o no carga la librería, cae a un estante plano con la misma información
+
+No hay barra lateral, ni rejilla de tarjetas, ni gráficas: se retiraron en septiembre de 2026 porque repetían en widgets lo que el propio mueble ya dice.
 
 **Funciona aunque la nube no**
 El plan gratuito de Supabase pausa el proyecto tras una semana sin actividad. La app está construida para sobrevivir a eso: guarda una copia local en cada escritura y arranca con ella si la nube no responde, en vez de dejarte en la pantalla de login. También podés entrar sin conexión a propósito.
@@ -58,7 +63,7 @@ La anon key va en el código a propósito: es pública por diseño. Lo que prote
 - **Exportar** descarga un JSON con temas y lecturas
 - **Importar** restaura el *progreso* sobre los libros que ya existen, emparejando por título, y te avisa cuáles no encontró
 
-Es la única copia que sobrevive tanto a un proyecto pausado como a un navegador limpio. La carga masiva de material nuevo se hace por SQL, como en `supabase-schema-v3.sql`.
+Es la única copia que sobrevive tanto a un proyecto pausado como a un navegador limpio. Para dar de alta mucho material de golpe está el botón **+ Varias**, que abre una tabla editable dentro de la app; la ruta por SQL de `supabase-schema-v3.sql` es historia.
 
 ## Formato de fechas
 
@@ -74,24 +79,25 @@ Internamente la base guarda `DATE` en ISO y la traducción ocurre en un único p
 
 ## Tecnología
 
-JavaScript puro, sin framework y sin paso de compilación. Chart.js por CDN para la gráfica de barras, Supabase para persistencia y autenticación, y la API de Google Books para las portadas.
+JavaScript puro, sin framework y sin paso de compilación. Three.js por CDN para la estantería, Supabase para persistencia y autenticación, y la API de Google Books para las portadas.
 
-El diseño es un sistema propio, *"Papel y tinta"*: papel crudo, tinta negra cálida y tipografía editorial, sin decoración que cueste espacio. Los tres colores de estado están validados para contraste y daltonismo sobre fondo claro; si los tocás, hay que revalidarlos.
+El diseño es un sistema propio, *"Biblioteca"*: nogal oscuro, tinta blanca cálida, latón y luz de lámpara, con Instrument Serif para los títulos y Plus Jakarta Sans para los datos. Sustituyó a *"Papel y tinta"* en el rediseño de septiembre de 2026, cuando el mueble 3D pasó a ser el centro de la interfaz. Los tres colores de estado están validados para contraste y daltonismo sobre el fondo oscuro; si los tocás, hay que revalidarlos.
 
-La interfaz ocupa exactamente el alto de la ventana: la página no hace scroll, solo lo hacen la barra lateral y la rejilla de lecturas.
+La interfaz ocupa exactamente el alto de la ventana: la página no hace scroll, solo lo hacen el contenedor del mueble y el cuerpo de los modales.
 
 ## Estructura
 
 ```
-index.html              Una sola página: login, biblioteca y tres modales
+index.html              Una sola página: login, estantería, menú y cinco modales
 servidor.js             Servidor estático mínimo, sin dependencias
 css/
   styles.css            Sistema de diseño y layout
   animations.css        Keyframes y prefers-reduced-motion
+  estante.css           Chrome del mueble, espejo accesible y respaldo plano
 js/
   supabase.js           Cliente (nunca lanza: si falla, modo offline)
   data.js               Fechas y conversión ISO ↔ español
-  charts.js             Barra apilada de estados y páginas por mes
+  estante3d.js          La estantería en WebGL (si falla, estante plano)
   db.js                 CRUD de temas y libros
   auth.js               Sesión, OAuth y modo offline
   app.js                Estado e interfaz

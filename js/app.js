@@ -5,9 +5,7 @@
 // Estado global
 let temas = [];
 let libros = [];
-let temaActual = null;        // null = todos los temas · 'sin-tema' = huérfanos
 let filtroActual = 'Todos';   // por estado de lectura
-let vistaActual = 'grid';
 let libroEditando = null;     // id (uuid) del libro abierto en el modal
 let eventListenersInicializados = false;
 
@@ -274,7 +272,6 @@ function actualizarDiasEnProceso() {
 
     if (actualizado) {
         renderizarLibros();
-        actualizarEstadisticas();
     }
 }
 
@@ -362,115 +359,30 @@ async function cargarTodasLasPortadas() {
 }
 
 // ========================================
-// Selección por tema
-// ========================================
-function librosDelTema() {
-    if (temaActual === null) return libros;
-    if (temaActual === 'sin-tema') return libros.filter(l => !l.tema_id);
-    return libros.filter(l => l.tema_id === temaActual);
-}
-
-function nombreTemaActual() {
-    if (temaActual === null) return 'Todas mis lecturas';
-    if (temaActual === 'sin-tema') return 'Sin tema';
-    return temas.find(t => t.id === temaActual)?.nombre ?? 'Tema';
-}
-
-function seleccionarTema(id) {
-    temaActual = id;
-    aplicarColorTema();
-    renderizarTemas();
-    actualizarInterfaz();
-    if (window.innerWidth <= 768) cerrarSidebarMobile();
-}
-
-// Cada tema puede llevar su propio acento; se inyecta como variable CSS
-// para que toda la interfaz (incluidas las gráficas) lo herede.
-function aplicarColorTema() {
-    const tema = temas.find(t => t.id === temaActual);
-    const color = tema?.color || null;
-    if (color) {
-        document.documentElement.style.setProperty('--tema-acento', color);
-    } else {
-        document.documentElement.style.removeProperty('--tema-acento');
-    }
-}
-
-// ========================================
 // Renderizado
 // ========================================
+// Ya no hay vistas que elegir ni tema seleccionado: la interfaz es el mueble.
+// Los temas se eligen abriendo su balda, no en una lista aparte, así que
+// `temaActual`, `librosDelTema()` y `aplicarColorTema()` desaparecieron en el
+// recorte del 2026-09-26 — eran estado que ya no gobernaba nada.
+
 function actualizarInterfaz() {
-    renderizarTemas();
+    actualizarAccionesCatalogo();
     renderizarLibros();
-    actualizarEstadisticas();
-    renderizarTimeline();
-    initCharts(librosDelTema(), temas, libros);
-    actualizarTituloSeccion();
     cargarTodasLasPortadas();
 }
 
-function actualizarTituloSeccion() {
-    const titulo = document.getElementById('section-title');
-    if (titulo) {
-        titulo.textContent = nombreTemaActual();
-        titulo.dataset.text = nombreTemaActual();
-    }
-}
-
-function renderizarTemas() {
-    const lista = document.getElementById('temas-list');
-    if (!lista) return;
-
-    lista.innerHTML = '';
-
-    const entradas = [
-        { id: null, nombre: 'Todas mis lecturas', color: null, total: libros.length }
-    ];
-
-    temas.forEach(t => entradas.push({
-        id: t.id,
-        nombre: t.nombre,
-        color: t.color,
-        total: libros.filter(l => l.tema_id === t.id).length
-    }));
-
-    const huerfanos = libros.filter(l => !l.tema_id).length;
-    if (huerfanos > 0) {
-        entradas.push({ id: 'sin-tema', nombre: 'Sin tema', color: null, total: huerfanos });
-    }
-
-    entradas.forEach(entrada => {
-        const boton = document.createElement('button');
-        boton.className = 'tema-btn' + (entrada.id === temaActual ? ' active' : '');
-        boton.innerHTML = `
-            <span class="tema-punto" style="background:${entrada.color || 'var(--text-muted)'}"></span>
-            <span class="tema-nombre">${escaparHtml(entrada.nombre)}</span>
-            <span class="tema-count">${entrada.total}</span>
-        `;
-        boton.addEventListener('click', () => seleccionarTema(entrada.id));
-
-        // Editar tema: solo para temas reales, no para los agregados
-        if (entrada.id && entrada.id !== 'sin-tema') {
-            const editar = document.createElement('span');
-            editar.className = 'tema-editar';
-            editar.textContent = '✎';
-            editar.title = 'Editar tema';
-            editar.addEventListener('click', e => {
-                e.stopPropagation();
-                abrirModalTema(entrada.id);
-            });
-            boton.appendChild(editar);
-        }
-
-        lista.appendChild(boton);
-    });
-}
-
 function renderizarLibros() {
-    const grid = document.getElementById('books-grid');
-    if (!grid) return;
+    const raiz = document.getElementById('estante-raiz');
+    if (!raiz) return;
 
-    let visibles = librosDelTema();
+    // El muro 3D vive dentro de este mismo contenedor. Hay que desmontarlo
+    // ANTES de vaciarlo: si no, el canvas se queda huérfano con su contexto
+    // WebGL vivo y cada re-render deja uno más colgando.
+    desmontarMuro();
+    if (pistaEl) pistaEl.hidden = true;
+
+    let visibles = libros;
 
     if (filtroActual !== 'Todos') {
         visibles = visibles.filter(libro => libro.estado === filtroActual);
@@ -484,209 +396,305 @@ function renderizarLibros() {
         );
     }
 
-    grid.innerHTML = '';
+    raiz.innerHTML = '';
 
     if (visibles.length === 0) {
-        grid.innerHTML = `<p class="grid-vacio">${
+        raiz.innerHTML = `<p class="estante-vacio">${
             libros.length === 0
-                ? 'Todavía no hay libros. Crea un tema y añade el primero.'
-                : 'No se encontraron libros con ese criterio.'
+                ? 'Todavía no hay lecturas. Abre el menú y crea un tema.'
+                : 'Ninguna lectura coincide con ese criterio.'
         }</p>`;
         return;
     }
 
-    // Agrupado por subtema, conservando el orden de aparición. Si ningún
-    // libro visible tiene subtema, se pinta la rejilla plana de siempre y no
-    // se muestra un encabezado "Sin subtema" que no aportaría nada.
-    const grupos = new Map();
-    visibles.forEach(libro => {
-        const clave = libro.subtema || '';
-        if (!grupos.has(clave)) grupos.set(clave, []);
-        grupos.get(clave).push(libro);
-    });
-
-    const haySubtemas = [...grupos.keys()].some(k => k !== '');
-
-    if (!haySubtemas) {
-        grid.classList.remove('agrupado');
-        visibles.forEach(libro => grid.appendChild(crearCardLibro(libro)));
-        return;
-    }
-
-    grid.classList.add('agrupado');
-
-    for (const [subtema, delGrupo] of grupos) {
-        const seccion = document.createElement('section');
-        seccion.className = 'subtema-grupo';
-        seccion.innerHTML = `
-            <h3 class="subtema-titulo">
-                <span>${escaparHtml(subtema || 'Sin subtema')}</span>
-                <span class="subtema-count">${delGrupo.length}</span>
-            </h3>
-            <div class="subtema-grid"></div>
-        `;
-
-        const contenedor = seccion.querySelector('.subtema-grid');
-        delGrupo.forEach(libro => contenedor.appendChild(crearCardLibro(libro)));
-        grid.appendChild(seccion);
-    }
+    renderizarEstante(raiz, visibles);
 }
 
-function crearCardLibro(libro) {
-    const card = document.createElement('div');
-    card.className = 'book-card';
-    card.dataset.id = libro.id;
+// ========================================
+// Estantería: muro, espejo accesible y respaldo plano
+// ========================================
+// El 3D lo pinta js/estante3d.js. Aquí vive todo lo que es DOM: agrupar en
+// baldas, la leyenda, el espejo accesible y el estante plano de respaldo.
 
-    calcularDias(libro);
-
-    const claseEstado = libro.estado === 'Leído' ? 'leido'
-                      : libro.estado === 'Leyendo' ? 'leyendo'
-                      : 'pendiente';
-    card.classList.add('estado-' + claseEstado);
-
-    let progreso = 0;
-    if (libro.estado === 'Leído') {
-        progreso = 100;
-    } else if (libro.estado === 'Leyendo' && libro.inicio) {
-        const promedio = calcularPromedioDias();
-        progreso = Math.min(((libro.dias || 0) / (promedio > 0 ? promedio : 30)) * 100, 95);
-    }
-
-    card.innerHTML = `
-        <div class="book-card-actions">
-            <button class="quick-action-btn quick-action-pendiente" data-action="Pendiente" title="Pendiente">⊙</button>
-            <button class="quick-action-btn quick-action-leyendo" data-action="Leyendo" title="Leyendo">▶</button>
-            <button class="quick-action-btn quick-action-leido" data-action="Leído" title="Leído">✓</button>
-        </div>
-        <div class="book-cover-wrapper">
-            ${libro.portada
-                ? `<img src="${libro.portada}" alt="${escaparHtml(libro.titulo)}" class="book-cover">`
-                : '<div class="book-cover-placeholder">📚</div>'}
-        </div>
-        <div class="book-info">
-            <h3 class="book-title">${escaparHtml(libro.titulo)}</h3>
-            <p class="book-meta">
-                <span class="book-status status-${claseEstado}">${libro.estado}</span>
-                ${libro.tipo && libro.tipo !== 'Libro' ? `<span class="book-tipo">${escaparHtml(libro.tipo)}</span>` : ''}
-                ${libro.año ? `<span class="book-year">${libro.año}</span>` : ''}
-                ${libro.paginas ? `<span class="book-pages">${libro.paginas} pág</span>` : ''}
-            </p>
-            <div class="book-progress" role="progressbar"
-                 aria-valuenow="${Math.round(progreso)}" aria-valuemin="0" aria-valuemax="100"
-                 aria-label="Progreso de ${escaparHtml(libro.titulo)}">
-                <div class="book-progress-bar" style="width: ${progreso}%"></div>
-            </div>
-        </div>
-    `;
-
-    card.addEventListener('click', e => {
-        if (e.target.closest('.quick-action-btn')) return;
-        abrirModalEdicion(libro.id);
+// Agrupa los libros visibles en baldas {id, nombre, color, libros}, en el
+// orden de los temas. Los huérfanos (sin tema_id) van al final en la balda
+// virtual 'sin-tema', igual que el selector de la barra lateral.
+function baldasDesde(visibles) {
+    const porTema = new Map();
+    visibles.forEach(libro => {
+        const clave = libro.tema_id || 'sin-tema';
+        if (!porTema.has(clave)) porTema.set(clave, []);
+        porTema.get(clave).push(libro);
     });
 
-    card.querySelectorAll('.quick-action-btn').forEach(btn => {
-        btn.addEventListener('click', e => {
-            e.stopPropagation();
-            cambiarEstadoRapido(libro.id, btn.dataset.action);
+    const baldas = [];
+    temas.forEach(tema => {
+        if (!porTema.has(tema.id)) return;
+        baldas.push({
+            id: tema.id,
+            nombre: tema.nombre,
+            color: tema.color || token('--laton', '#C9A227'),
+            libros: porTema.get(tema.id)
         });
     });
 
-    return card;
+    if (porTema.has('sin-tema')) {
+        baldas.push({
+            id: 'sin-tema',
+            nombre: 'Sin tema',
+            color: token('--tinta-tenue', '#8C7C68'),
+            libros: porTema.get('sin-tema')
+        });
+    }
+
+    return baldas;
 }
 
-function actualizarEstadisticas() {
-    const ambito = librosDelTema();
+function renderizarEstante(grid, visibles) {
+    const baldas = baldasDesde(visibles);
 
-    const leidos = ambito.filter(l => l.estado === 'Leído');
-    const paginas = leidos.reduce((total, l) => total + (l.paginas || 0), 0);
+    const muroEl = document.createElement('div');
+    muroEl.className = 'estante-muro';
+    muroEl.appendChild(crearLeyendaEstante(visibles));
 
-    const asignar = (id, valor) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = valor;
-    };
+    const escena = document.createElement('div');
+    escena.className = 'estante-escena';
+    muroEl.appendChild(escena);
+    muroEl.appendChild(crearEspejoEstante(baldas, enfocarLibroEnMuro));
+    grid.appendChild(muroEl);
 
-    asignar('total-leidos', leidos.length);
-    asignar('total-leyendo', ambito.filter(l => l.estado === 'Leyendo').length);
-    asignar('total-pendientes', ambito.filter(l => l.estado === 'Pendiente').length);
-    asignar('total-paginas', paginas.toLocaleString());
-    asignar('promedio-dias', calcularPromedioDias());
+    // montarMuro devuelve false si Three.js no llegó o no hay WebGL. Entonces
+    // se cambia la escena por el estante plano y la app sigue igual de usable:
+    // la misma regla que ya sigue la gráfica de páginas.
+    const montado = montarMuro(escena, baldas, abrirEstante, abrirModalEdicion, mostrarPista);
+    if (!montado) {
+        escena.remove();
+        muroEl.insertBefore(crearEstantePlano(baldas), muroEl.querySelector('.estante-espejo'));
+    }
+}
+
+// Etiqueta flotante con lo que hay bajo el cursor. Los lomos del muro no
+// llevan texto rasterizado —serían 112 texturas para un ancho de 16px en el
+// que no se leería nada—, así que el título vive aquí, en DOM real.
+let pistaEl = null;
+
+function mostrarPista(libroId, evento) {
+    if (!pistaEl) {
+        pistaEl = document.createElement('div');
+        pistaEl.className = 'estante-pista';
+        pistaEl.hidden = true;
+        document.body.appendChild(pistaEl);
+    }
+
+    const libro = libroId ? buscarLibro(libroId) : null;
+    if (!libro || !evento) {
+        pistaEl.hidden = true;
+        return;
+    }
+
+    pistaEl.innerHTML =
+        '<strong>' + escaparHtml(libro.titulo) + '</strong>' +
+        (libro.autor ? '<span>' + escaparHtml(libro.autor) + '</span>' : '') +
+        '<span class="estante-pista-estado ' + claseEstado(libro.estado) + '">' +
+        escaparHtml(libro.estado) + '</span>';
+    pistaEl.hidden = false;
+
+    // Se coloca tras medirla, y se repliega si se saldría por la derecha o
+    // por abajo: junto al borde de la ventana, arriba a la izquierda.
+    const caja = pistaEl.getBoundingClientRect();
+    const margen = 14;
+    let x = evento.clientX + margen;
+    let y = evento.clientY + margen;
+    if (x + caja.width > window.innerWidth - 8) x = evento.clientX - caja.width - margen;
+    if (y + caja.height > window.innerHeight - 8) y = evento.clientY - caja.height - margen;
+    pistaEl.style.transform = 'translate(' + Math.max(8, x) + 'px, ' + Math.max(8, y) + 'px)';
+}
+
+function crearLeyendaEstante(visibles) {
+    const cuenta = estado => visibles.filter(l => l.estado === estado).length;
+    const filas = [
+        { clase: 'leido', etiqueta: 'Leídos', valor: cuenta('Leído') },
+        { clase: 'leyendo', etiqueta: 'Leyendo', valor: cuenta('Leyendo') },
+        { clase: 'pendiente', etiqueta: 'Pendientes', valor: cuenta('Pendiente') }
+    ];
+
+    const el = document.createElement('div');
+    el.className = 'estante-leyenda';
+    // Nombre y número en cada entrada: en el muro el estado es una banda de
+    // color, y la identidad no puede depender solo del color.
+    el.innerHTML = filas.map(f =>
+        '<span class="estante-leyenda-item">' +
+        '<span class="estante-leyenda-punto ' + f.clase + '"></span>' +
+        f.etiqueta +
+        '<span class="estante-leyenda-valor">' + f.valor + '</span>' +
+        '</span>'
+    ).join('') +
+    '<span class="estante-leyenda-pista">Pulsa una balda para abrirla</span>';
+    return el;
+}
+
+// El espejo accesible: el mueble en DOM real, invisible pero enfocable. Sin
+// esto el canvas sería un muro opaco para el teclado y el lector de pantalla,
+// y los títulos no existirían para Ctrl+F.
+function crearEspejoEstante(baldas, alEnfocar) {
+    const el = document.createElement('div');
+    el.className = 'estante-espejo';
+
+    const partes = baldas.map(balda => {
+        const items = balda.libros.map(libro =>
+            '<li><button type="button" data-libro="' + escaparHtml(libro.id) + '">' +
+            escaparHtml(libro.titulo) +
+            (libro.autor ? ' — ' + escaparHtml(libro.autor) : '') +
+            ' · ' + escaparHtml(libro.estado) +
+            '</button></li>'
+        ).join('');
+
+        return '<section><h3><button type="button" data-balda="' + escaparHtml(balda.id) + '">' +
+               'Abrir el estante ' + escaparHtml(balda.nombre) + ' (' + balda.libros.length + ')' +
+               '</button></h3><ul>' + items + '</ul></section>';
+    });
+
+    el.innerHTML = '<h2>Estantería</h2>' + partes.join('');
+
+    el.addEventListener('click', e => {
+        const btnLibro = e.target.closest('button[data-libro]');
+        if (btnLibro) return abrirModalEdicion(btnLibro.dataset.libro);
+        const btnBalda = e.target.closest('button[data-balda]');
+        if (btnBalda) return abrirEstante(btnBalda.dataset.balda);
+    });
+
+    // Tabular saca el mismo libro que sacaría el ratón: el foco de teclado y
+    // el hover cuentan la misma historia.
+    el.addEventListener('focusin', e => {
+        const btn = e.target.closest('button[data-libro]');
+        if (btn && alEnfocar) alEnfocar(btn.dataset.libro);
+    });
+
+    return el;
+}
+
+// Respaldo sin WebGL. No imita el 3D: los mismos lomos, en plano.
+function crearEstantePlano(baldas) {
+    const el = document.createElement('div');
+    el.className = 'estante-plano';
+
+    el.innerHTML = baldas.map(balda => {
+        const lomos = balda.libros.map(libro =>
+            '<button type="button" class="estante-plano-lomo ' + claseEstado(libro.estado) + '"' +
+            ' style="height: ' + (52 + (libro.titulo.length % 7) * 5) + 'px; background: ' + escaparHtml(balda.color) + ';"' +
+            ' title="' + escaparHtml(libro.titulo) + '"' +
+            ' aria-label="' + escaparHtml(libro.titulo) + ' · ' + escaparHtml(libro.estado) + '"' +
+            ' data-libro="' + escaparHtml(libro.id) + '"></button>'
+        ).join('');
+
+        return '<section class="estante-plano-balda">' +
+               '<button type="button" class="estante-plano-canto" data-balda="' + escaparHtml(balda.id) + '">' +
+               escaparHtml(balda.nombre) +
+               '<span class="estante-plano-cuenta">' + balda.libros.length + '</span>' +
+               '</button>' +
+               '<div class="estante-plano-lomos">' + lomos + '</div>' +
+               '</section>';
+    }).join('');
+
+    el.addEventListener('click', e => {
+        const btnLibro = e.target.closest('button[data-libro]');
+        if (btnLibro) return abrirModalEdicion(btnLibro.dataset.libro);
+        const btnBalda = e.target.closest('button[data-balda]');
+        if (btnBalda) return abrirEstante(btnBalda.dataset.balda);
+    });
+
+    return el;
+}
+
+// ----------------------------------------
+// Modal del estante
+// ----------------------------------------
+
+function abrirEstante(baldaId) {
+    const modal = document.getElementById('estante-modal');
+    const cuerpo = document.getElementById('estante-modal-cuerpo');
+    if (!modal || !cuerpo) return;
+
+    const esSinTema = baldaId === 'sin-tema';
+    const tema = esSinTema ? null : temas.find(t => t.id === baldaId);
+    if (!esSinTema && !tema) return;
+
+    const delTema = esSinTema
+        ? libros.filter(l => !l.tema_id)
+        : libros.filter(l => l.tema_id === baldaId);
+
+    const nombre = esSinTema ? 'Sin tema' : tema.nombre;
+    const acento = (esSinTema ? null : tema.color) || token('--laton', '#C9A227');
+
+    document.getElementById('estante-modal-titulo').textContent = nombre;
+    document.getElementById('estante-modal-cuenta').textContent =
+        delTema.length === 1 ? '1 lectura' : delTema.length + ' lecturas';
+    // El acento se fija en el modal, no en :root: abrir un estante no cambia
+    // el tema que estás mirando en el resto de la interfaz.
+    modal.style.setProperty('--tema-acento', acento);
+
+    desmontarEstanteModal();
+    cuerpo.innerHTML = '';
+
+    // El modal se activa ANTES de montar la escena. Un contenedor oculto mide
+    // 0 y la cámara saldría con un aspect ratio absurdo: la misma lección que
+    // obliga a rehacer las gráficas al abrir el panel de análisis.
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+
+    // El muro se desmonta al abrir el modal. No es solo ahorro: un navegador
+    // admite del orden de 16 contextos WebGL a la vez y, al pasarse, mata el
+    // MÁS VIEJO — que es justo el del muro. Abriendo y cerrando estantes
+    // deprisa, el mueble del fondo se quedaba en negro y ya no volvía.
+    // Con esto nunca hay dos escenas vivas, y de paso el muro tapado deja de
+    // ocupar memoria de vídeo.
+    desmontarMuro();
+
+    const escena = document.createElement('div');
+    escena.className = 'estante-escena';
+    cuerpo.appendChild(escena);
+
+    const baldaUnica = [{ id: baldaId, nombre: nombre, color: acento, libros: delTema }];
+    cuerpo.appendChild(crearEspejoEstante(baldaUnica, enfocarLibroEnModal));
+
+    const montado = montarEstanteModal(escena, { nombre: nombre, color: acento }, delTema, id => {
+        cerrarEstante();
+        abrirModalEdicion(id);
+    });
+
+    if (!montado) {
+        escena.remove();
+        cuerpo.insertBefore(crearEstantePlano(baldaUnica), cuerpo.firstChild);
+    }
+
+    document.getElementById('estante-modal-close')?.focus();
+}
+
+function cerrarEstante() {
+    const modal = document.getElementById('estante-modal');
+    if (!modal) return;
+    // Liberar la GPU antes de ocultar: abrir y cerrar el estante veinte veces
+    // no puede dejar veinte escenas vivas.
+    desmontarEstanteModal();
+    document.getElementById('estante-modal-cuerpo').innerHTML = '';
+    modal.classList.remove('active');
+    modal.style.removeProperty('--tema-acento');
+    document.body.style.overflow = '';
+
+    // Y se vuelve a levantar el muro, que se había desmontado al abrir.
+    renderizarLibros();
 }
 
 function calcularPromedioDias() {
-    const conDias = librosDelTema().filter(l => l.estado === 'Leído' && l.dias !== null);
+    const conDias = libros.filter(l => l.estado === 'Leído' && l.dias !== null);
     if (!conDias.length) return 0;
     return Math.round(conDias.reduce((suma, l) => suma + l.dias, 0) / conDias.length);
 }
 
-// Cronología de LECTURA, no de publicación: es lo que convierte la app en
-// un diario. Los pendientes sin fecha no aparecen porque no son un hito.
 function claseEstado(estado) {
     return estado === 'Leído' ? 'leido'
          : estado === 'Leyendo' ? 'leyendo'
          : 'pendiente';
-}
-
-function renderizarTimeline() {
-    const timeline = document.getElementById('timeline');
-    if (!timeline) return;
-
-    const delTema = librosDelTema();
-
-    const conFecha = delTema
-        .filter(l => l.inicio || l.final)
-        .map(l => ({ libro: l, fecha: parseFechaEspañol(l.final || l.inicio) }))
-        .filter(x => x.fecha)
-        .sort((a, b) => b.fecha - a.fecha);
-
-    // Lo empezado o terminado SIN fecha. Filtrarlo hacía que el timeline
-    // mintiera por omisión: hoy la mayoría de las lecturas terminadas no
-    // tienen fecha (se cargaron desde la hoja de cálculo sin ella), así que
-    // el diario mostraba dos entradas y escondía el resto.
-    const sinFecha = delTema
-        .filter(l => l.estado !== 'Pendiente' && !l.inicio && !l.final)
-        .sort((a, b) => a.titulo.localeCompare(b.titulo, 'es'));
-
-    if (!conFecha.length && !sinFecha.length) {
-        // Sin la línea: una raya vertical al lado de un aviso, sin un solo
-        // hito que sostener, no significa nada.
-        timeline.innerHTML = '<p class="grid-vacio">Aún no has empezado ninguna lectura.</p>';
-        return;
-    }
-
-    timeline.innerHTML = conFecha.length ? '<div class="timeline-line"></div>' : '';
-
-    const crearItem = (libro, etiquetaFecha) => {
-        const clase = claseEstado(libro.estado);
-
-        const item = document.createElement('div');
-        item.className = `timeline-item ${clase}`;
-        item.innerHTML = `
-            <div class="timeline-dot ${clase}"></div>
-            <div class="timeline-year">${etiquetaFecha}</div>
-            <div class="timeline-title">${escaparHtml(libro.titulo)}</div>
-            <span class="timeline-status ${clase}">${libro.estado}</span>
-        `;
-        item.addEventListener('click', () => abrirModalEdicion(libro.id));
-        return item;
-    };
-
-    conFecha.forEach(({ libro, fecha }) => {
-        timeline.appendChild(crearItem(libro, formatearFechaEspañol(fecha)));
-    });
-
-    if (!sinFecha.length) return;
-
-    // Bloque aparte, no mezclado: son lecturas reales, pero no son hitos —
-    // no se pueden ordenar en el tiempo y no deben fingir que sí.
-    const separador = document.createElement('p');
-    separador.className = 'timeline-separador';
-    separador.textContent = `Sin fecha registrada (${sinFecha.length})`;
-    timeline.appendChild(separador);
-
-    const grupo = document.createElement('div');
-    grupo.className = 'timeline-sin-fecha';
-    sinFecha.forEach(libro => grupo.appendChild(crearItem(libro, '—')));
-    timeline.appendChild(grupo);
 }
 
 function escaparHtml(texto) {
@@ -873,18 +881,18 @@ async function cambiarEstadoRapido(id, nuevoEstado) {
 // CRUD de temas
 // ========================================
 function abrirModalTema(id = null) {
-    if (!puedeEditarCatalogo()) {
-        alert('Necesitas iniciar sesión para editar temas.');
-        return;
-    }
+    // Sin sesión no se puede: los botones del menú ya salen deshabilitados,
+    // así que aquí basta con no hacer nada. Un alert bloqueaba el hilo y
+    // era ruido justo en la parte de la interfaz que se limpió.
+    if (!puedeEditarCatalogo()) return;
 
     const tema = id ? temas.find(t => t.id === id) : null;
 
     document.getElementById('tema-modal-titulo').textContent = tema ? 'Editar tema' : 'Nuevo tema';
     document.getElementById('tema-nombre').value = tema?.nombre || '';
-    // Por defecto, el mismo acento que --tema-acento en :root (ámbar). El
+    // Por defecto, el mismo acento que --tema-acento en :root (latón). El
     // verde neón que había aquí era de la paleta anterior.
-    document.getElementById('tema-color').value = tema?.color || '#B57C00';
+    document.getElementById('tema-color').value = tema?.color || '#C9A227';
     document.getElementById('tema-id').value = id || '';
 
     const btnBorrar = document.getElementById('btn-borrar-tema');
@@ -926,12 +934,10 @@ async function guardarTema(event) {
             return;
         }
         temas.push(creado);
-        temaActual = creado.id;
     }
 
     escribirCacheLocal();
     cerrarModalTema();
-    aplicarColorTema();
     actualizarInterfaz();
 }
 
@@ -954,11 +960,8 @@ async function borrarTema() {
 
     temas = temas.filter(t => t.id !== id);
     libros.forEach(l => { if (l.tema_id === id) l.tema_id = null; });
-    if (temaActual === id) temaActual = null;
-
     escribirCacheLocal();
     cerrarModalTema();
-    aplicarColorTema();
     actualizarInterfaz();
 }
 
@@ -966,10 +969,10 @@ async function borrarTema() {
 // CRUD de libros
 // ========================================
 function abrirModalLibro(id = null) {
-    if (!puedeEditarCatalogo()) {
-        alert('Necesitas iniciar sesión para añadir o editar libros.');
-        return;
-    }
+    // Sin sesión no se puede: los botones del menú ya salen deshabilitados,
+    // así que aquí basta con no hacer nada. Un alert bloqueaba el hilo y
+    // era ruido justo en la parte de la interfaz que se limpió.
+    if (!puedeEditarCatalogo()) return;
 
     const libro = id ? buscarLibro(id) : null;
 
@@ -1002,8 +1005,7 @@ function abrirModalLibro(id = null) {
         opcion.textContent = t.nombre;
         selector.appendChild(opcion);
     });
-    selector.value = libro?.tema_id
-        || (temaActual && temaActual !== 'sin-tema' ? temaActual : '');
+    selector.value = libro?.tema_id || '';
 
     document.getElementById('btn-borrar-libro').style.display = libro ? '' : 'none';
 
@@ -1103,10 +1105,10 @@ function normalizarTitulo(texto) {
 }
 
 function abrirModalLote() {
-    if (!puedeEditarCatalogo()) {
-        alert('Necesitas iniciar sesión para añadir lecturas.');
-        return;
-    }
+    // Sin sesión no se puede: los botones del menú ya salen deshabilitados,
+    // así que aquí basta con no hacer nada. Un alert bloqueaba el hilo y
+    // era ruido justo en la parte de la interfaz que se limpió.
+    if (!puedeEditarCatalogo()) return;
 
     const selector = document.getElementById('lote-tema');
     selector.innerHTML = '<option value="">Sin tema</option>';
@@ -1116,8 +1118,9 @@ function abrirModalLote() {
         opcion.textContent = t.nombre;
         selector.appendChild(opcion);
     });
-    // Hereda el tema que estás mirando: es casi siempre el destino.
-    selector.value = (temaActual && temaActual !== 'sin-tema') ? temaActual : '';
+    // Antes heredaba el tema que estabas mirando. Ya no existe esa noción:
+    // el destino se elige aquí, a mano.
+    selector.value = '';
 
     document.getElementById('lote-subtema').value = '';
 
@@ -1268,25 +1271,62 @@ async function crearLoteLecturas() {
 // ========================================
 function aplicarFiltro(filtro) {
     filtroActual = filtro;
-    document.querySelectorAll('.filter-btn').forEach(btn => {
+    document.querySelectorAll('.menu-filtro').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.filter === filtro);
     });
     renderizarLibros();
 }
 
 // ========================================
-// Sidebar mobile
+// Menú "···"
 // ========================================
-function abrirSidebarMobile() {
-    document.querySelector('.sidebar')?.classList.add('sidebar-open');
-    document.getElementById('sidebar-overlay')?.classList.add('active');
-    document.body.style.overflow = 'hidden';
+// Recoge todo lo que antes ocupaba la barra lateral. En reposo la pantalla es
+// solo el mueble; el precio acordado es que buscar sea un gesto de dos pasos.
+
+// Crear temas y libros necesita un id generado por el servidor, así que sin
+// sesión no se puede. En vez de dejar pulsar y avisar después, las tres
+// acciones salen deshabilitadas con una nota que dice por qué.
+function actualizarAccionesCatalogo() {
+    const permitido = !!puedeEditarCatalogo();
+    ['btn-nuevo-tema', 'btn-nuevo-libro', 'btn-nuevas-lecturas'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = !permitido;
+    });
+    const nota = document.getElementById('menu-nota-offline');
+    if (nota) nota.hidden = permitido;
 }
 
-function cerrarSidebarMobile() {
-    document.querySelector('.sidebar')?.classList.remove('sidebar-open');
-    document.getElementById('sidebar-overlay')?.classList.remove('active');
-    document.body.style.overflow = '';
+function menuAbierto() {
+    return document.getElementById('menu-btn')?.getAttribute('aria-expanded') === 'true';
+}
+
+function abrirMenu() {
+    const btn = document.getElementById('menu-btn');
+    const panel = document.getElementById('menu-panel');
+    const velo = document.getElementById('menu-velo');
+    if (!btn || !panel) return;
+
+    actualizarAccionesCatalogo();
+    btn.setAttribute('aria-expanded', 'true');
+    panel.hidden = false;
+    if (velo) velo.hidden = false;
+    // Se abre con el cursor ya en la búsqueda: es lo que más se viene a hacer.
+    document.getElementById('search-input')?.focus();
+}
+
+function cerrarMenu() {
+    const btn = document.getElementById('menu-btn');
+    const panel = document.getElementById('menu-panel');
+    const velo = document.getElementById('menu-velo');
+    if (!btn || !panel) return;
+
+    btn.setAttribute('aria-expanded', 'false');
+    panel.hidden = true;
+    if (velo) velo.hidden = true;
+}
+
+function alternarMenu() {
+    menuAbierto() ? cerrarMenu() : abrirMenu();
 }
 
 // ========================================
@@ -1296,45 +1336,17 @@ function inicializarEventListeners() {
     if (eventListenersInicializados) return;
     eventListenersInicializados = true;
 
-    // Vista grid / lista
-    const viewBtns = document.querySelectorAll('.view-btn');
-    viewBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            viewBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            vistaActual = btn.dataset.view;
-            document.getElementById('books-grid')?.classList.toggle('view-list', vistaActual === 'list');
-        });
-    });
-
-    // Estadísticas clicables → filtran por estado
-    const statItems = document.querySelectorAll('.stat-item');
-    statItems.forEach(item => {
-        const filtro = item.dataset.filter;
-        if (!filtro) return;
-        item.classList.add('clickeable');
-        item.addEventListener('click', () => {
-            aplicarFiltro(filtro);
-            statItems.forEach(s => s.classList.remove('active'));
-            item.classList.add('active');
-        });
-    });
-
-    // Sidebar mobile
-    document.getElementById('mobile-menu-btn')?.addEventListener('click', abrirSidebarMobile);
-    document.getElementById('sidebar-overlay')?.addEventListener('click', cerrarSidebarMobile);
+    // Menú "···": búsqueda, filtro, altas, respaldo y sesión
+    document.getElementById('menu-btn')?.addEventListener('click', alternarMenu);
+    document.getElementById('menu-velo')?.addEventListener('click', cerrarMenu);
 
     // Filtros por estado
-    const filterButtons = document.querySelectorAll('.filter-btn');
-    filterButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.stat-item').forEach(s => s.classList.remove('active'));
-            aplicarFiltro(btn.dataset.filter);
-            if (window.innerWidth <= 768) cerrarSidebarMobile();
-        });
+    document.querySelectorAll('.menu-filtro').forEach(btn => {
+        btn.addEventListener('click', () => aplicarFiltro(btn.dataset.filter));
     });
 
-    // Búsqueda con debounce
+    // Búsqueda con debounce. El menú NO se cierra al escribir: se ve el mueble
+    // filtrarse detrás mientras tecleas, que es medio motivo para tenerlo abierto.
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
         let temporizador;
@@ -1343,34 +1355,6 @@ function inicializarEventListeners() {
             temporizador = setTimeout(renderizarLibros, 300);
         });
     }
-
-    // Panel de análisis: plegado por defecto para que no le quite pantalla
-    // a la rejilla, que es lo que se mira a diario.
-    const analysisSection = document.getElementById('analysis-section');
-    const analysisToggle = document.getElementById('analysis-toggle');
-
-    if (analysisSection && analysisToggle) {
-        analysisToggle.addEventListener('click', () => {
-            const abierto = analysisSection.classList.toggle('open');
-            analysisToggle.setAttribute('aria-expanded', String(abierto));
-            // Chart.js mide el contenedor al construir la gráfica, y oculto
-            // mide 0: hay que rehacerla al abrir.
-            if (abierto) initCharts(librosDelTema(), temas, libros);
-        });
-    }
-
-    // Tabs de análisis
-    const tabBtns = document.querySelectorAll('.tab-btn');
-    tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            tabBtns.forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            btn.classList.add('active');
-            document.getElementById(btn.dataset.tab + '-tab')?.classList.add('active');
-            // Mismo motivo que arriba: la pestaña oculta medía 0.
-            if (btn.dataset.tab === 'charts') initCharts(librosDelTema(), temas, libros);
-        });
-    });
 
     // Modal de lectura
     document.getElementById('modal-close')?.addEventListener('click', cerrarModal);
@@ -1390,6 +1374,16 @@ function inicializarEventListeners() {
     document.getElementById('tema-modal-backdrop')?.addEventListener('click', cerrarModalTema);
     document.getElementById('tema-form')?.addEventListener('submit', guardarTema);
     document.getElementById('btn-borrar-tema')?.addEventListener('click', borrarTema);
+
+    // Modal del estante
+    document.getElementById('estante-modal-close')?.addEventListener('click', cerrarEstante);
+    document.getElementById('estante-modal-backdrop')?.addEventListener('click', cerrarEstante);
+
+    // Los nombres de las baldas se dibujan en una textura de canvas, no en el
+    // DOM. Si las fuentes aún no han cargado cuando se monta el mueble, el
+    // texto queda grabado con la fuente de respaldo y ahí se queda: hay que
+    // rehacerlo una vez, cuando la tipografía esté lista.
+    document.fonts?.ready.then(() => renderizarLibros());
 
     // Alta de varias lecturas
     document.getElementById('btn-nuevas-lecturas')?.addEventListener('click', abrirModalLote);
@@ -1473,11 +1467,12 @@ function inicializarEventListeners() {
     // Escape cierra lo que esté abierto
     document.addEventListener('keydown', e => {
         if (e.key !== 'Escape') return;
+        if (document.getElementById('estante-modal')?.classList.contains('active')) return cerrarEstante();
         if (document.getElementById('lote-modal')?.classList.contains('active')) return cerrarModalLote();
         if (document.getElementById('libro-modal')?.classList.contains('active')) return cerrarModalLibro();
         if (document.getElementById('tema-modal')?.classList.contains('active')) return cerrarModalTema();
         if (document.getElementById('edit-modal')?.classList.contains('active')) return cerrarModal();
-        if (document.querySelector('.sidebar')?.classList.contains('sidebar-open')) return cerrarSidebarMobile();
+        if (menuAbierto()) return cerrarMenu();
     });
 }
 

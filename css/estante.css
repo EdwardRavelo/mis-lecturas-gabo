@@ -1,0 +1,402 @@
+/* ========================================
+   Estantería — chrome del muro y del modal
+   ========================================
+   Ni un hex aquí: todo sale de los tokens de styles.css. El 3D en sí lo pinta
+   js/estante3d.js, que lee esos mismos tokens con token().
+
+   La regla estructural de este archivo: EL CANVAS NUNCA EMPUJA A SU PADRE.
+   Va en position:absolute dentro de un contenedor de altura definida, así que
+   no puede crecer al contenedor y realimentar al ResizeObserver. Esa
+   realimentación ya se comió una vez la gráfica de páginas.
+   ======================================== */
+
+/* ----------------------------------------
+   Muro de estanterías
+   ---------------------------------------- */
+
+/* Aviso para quien vuelva a meter el mueble dentro de una rejilla: si el
+   contenedor es display:grid, el muro entra como una celda y el canvas sale
+   del tamaño de un sello. Hoy #estante-raiz es un bloque y no pasa. */
+
+.estante-muro {
+    display: flex;
+    flex-direction: column;
+    gap: var(--esp-md);
+    height: 100%;
+    min-height: 0;
+}
+
+.estante-escena {
+    position: relative;      /* ancla del canvas absoluto */
+    flex: 1 1 auto;
+    min-height: 320px;
+    border-radius: var(--radio-lg);
+    overflow: hidden;
+
+    /* Doble bisel: carcasa exterior con filo de luz e interior hundido, para
+       que el mueble parezca una pieza empotrada y no una imagen pegada. */
+    background:
+        radial-gradient(120% 80% at 20% 0%, var(--superficie-alta) 0%, var(--superficie-honda) 62%);
+    box-shadow:
+        var(--luz-filo),
+        inset 0 0 90px rgba(8, 5, 3, 0.75),
+        var(--sombra);
+    border: 1px solid var(--borde);
+}
+
+.estante-lienzo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Grano fino sobre la escena: le quita el brillo de render limpio. Va en un
+   pseudo-elemento sin eventos, nunca sobre un contenedor que scrollee. */
+.estante-escena::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.05;
+    background-image: radial-gradient(var(--tinta) 0.5px, transparent 0.5px);
+    background-size: 3px 3px;
+}
+
+/* ----------------------------------------
+   Leyenda de estados
+   ---------------------------------------- */
+/* En el muro el estado de un libro es una banda de color y nada más. La
+   leyenda es lo que impide que la identidad dependa solo del color: cada
+   entrada lleva nombre y número. */
+
+.estante-leyenda {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--esp-md);
+    flex: 0 0 auto;
+    /* El hueco de la derecha es para el botón "···", que flota encima y no
+       ocupa sitio en el flujo: sin reservarlo, se come el final de la pista. */
+    padding: var(--esp-sm) calc(var(--esp-md) + 44px) var(--esp-sm) var(--esp-md);
+    border: 1px solid var(--borde);
+    border-radius: 999px;
+    background: var(--superficie);
+    box-shadow: var(--luz-filo);
+    font-size: 0.8rem;
+    color: var(--tinta-suave);
+}
+
+.estante-leyenda-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--esp-xs);
+    white-space: nowrap;
+}
+
+.estante-leyenda-punto {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    flex: 0 0 auto;
+}
+
+.estante-leyenda-punto.leido     { background: var(--leido); }
+.estante-leyenda-punto.leyendo   { background: var(--leyendo); }
+.estante-leyenda-punto.pendiente { background: var(--pendiente); }
+
+.estante-leyenda-valor {
+    color: var(--tinta);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.estante-leyenda-pista {
+    margin-left: auto;
+    color: var(--tinta-tenue);
+    font-size: 0.74rem;
+}
+
+/* ----------------------------------------
+   Espejo accesible
+   ---------------------------------------- */
+/* Un <canvas> es opaco para el teclado, el lector de pantalla y Ctrl+F. Esta
+   lista reproduce el mueble en DOM real: invisible, pero enfocable y en el
+   mismo orden. Tab recorre los libros; el foco saca el libro 3D que toca.
+   No se usa `display:none` ni `visibility:hidden` — eso lo sacaría del orden
+   de tabulación, que es justo lo que queremos conservar. */
+
+.estante-espejo {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Al enfocar con teclado el botón sí se muestra, anclado abajo: si no, el
+   usuario tabula a ciegas sin saber en qué libro está. */
+.estante-espejo button:focus-visible {
+    position: fixed;
+    left: 50%;
+    bottom: var(--esp-lg);
+    transform: translateX(-50%);
+    width: auto;
+    height: auto;
+    margin: 0;
+    clip: auto;
+    clip-path: none;
+    z-index: 60;
+    padding: var(--esp-sm) var(--esp-lg);
+    border-radius: 999px;
+    background: var(--superficie-alta);
+    color: var(--tinta);
+    border: 1px solid var(--tema-acento);
+    box-shadow: var(--sombra);
+}
+
+/* ----------------------------------------
+   Estante plano — el respaldo sin WebGL
+   ---------------------------------------- */
+/* Si Three.js no llegó por CDN o no hay contexto WebGL, esto es lo que se
+   pinta. No intenta imitar el 3D: son los mismos lomos, en plano, legibles.
+   La app entera sigue usable. */
+
+.estante-plano {
+    display: flex;
+    flex-direction: column;
+    gap: var(--esp-lg);
+}
+
+.estante-plano-balda {
+    border: 1px solid var(--borde);
+    border-radius: var(--radio-md);
+    background: var(--superficie);
+    box-shadow: var(--luz-filo), var(--sombra-baja);
+    overflow: hidden;
+}
+
+.estante-plano-canto {
+    display: flex;
+    align-items: center;
+    gap: var(--esp-sm);
+    width: 100%;
+    padding: var(--esp-sm) var(--esp-md);
+    background: linear-gradient(180deg, var(--madera-clara), var(--madera-honda));
+    border: 0;
+    color: var(--tinta);
+    font-family: var(--fuente-titulo);
+    font-size: 1.15rem;
+    text-align: left;
+    transition: filter var(--transicion);
+}
+
+.estante-plano-canto:hover { filter: brightness(1.18); }
+
+.estante-plano-cuenta {
+    margin-left: auto;
+    font-family: var(--fuente-texto);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--laton);
+}
+
+.estante-plano-lomos {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 3px;
+    padding: var(--esp-md);
+    min-height: 90px;
+}
+
+.estante-plano-lomo {
+    width: 16px;
+    border: 0;
+    border-radius: 2px 2px 0 0;
+    border-bottom: 3px solid var(--borde-fuerte);
+    background: var(--tema-acento);
+    transition: transform var(--transicion);
+}
+
+.estante-plano-lomo:hover { transform: translateY(-8px); }
+.estante-plano-lomo.leido     { border-bottom-color: var(--leido); }
+.estante-plano-lomo.leyendo   { border-bottom-color: var(--leyendo); }
+.estante-plano-lomo.pendiente { border-bottom-color: var(--pendiente); }
+
+/* ----------------------------------------
+   Modal del estante
+   ---------------------------------------- */
+
+#estante-modal .modal-content {
+    width: min(1240px, 95vw);
+    max-width: none;
+    height: min(92dvh, 940px);
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+}
+
+.estante-modal-cabecera {
+    display: flex;
+    align-items: baseline;
+    gap: var(--esp-md);
+    flex: 0 0 auto;
+    /* El hueco de la derecha es para .modal-close, que va en absolute y no
+       ocupa sitio en el flujo: sin reservarlo, el contador se le mete debajo
+       y se corta en cuanto la ventana se estrecha. */
+    padding: var(--esp-lg) calc(var(--esp-xl) + 2.25rem) var(--esp-md) var(--esp-xl);
+    border-bottom: 1px solid var(--borde);
+}
+
+.estante-modal-titulo {
+    font-family: var(--fuente-titulo);
+    font-size: clamp(1.8rem, 3.6vw, 2.9rem);
+    font-weight: 400;
+    line-height: 1.05;
+    color: var(--tinta);
+}
+
+/* Etiqueta microscópica sobre el título: el tema que estás abriendo */
+.estante-modal-eyebrow {
+    display: inline-block;
+    padding: 3px var(--esp-sm);
+    border: 1px solid var(--tema-acento);
+    border-radius: 999px;
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--tema-acento);
+}
+
+.estante-modal-cuenta {
+    margin-left: auto;
+    white-space: nowrap;
+    font-size: 0.82rem;
+    color: var(--tinta-tenue);
+    font-variant-numeric: tabular-nums;
+}
+
+.estante-modal-cuerpo {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--esp-sm);
+    padding: var(--esp-md) var(--esp-xl) var(--esp-lg);
+}
+
+.estante-modal-cuerpo .estante-escena { min-height: 260px; }
+
+/* El respaldo plano dentro del modal sí scrollea: puede traer 52 libros */
+.estante-modal-cuerpo .estante-plano {
+    overflow-y: auto;
+    min-height: 0;
+}
+
+/* ----------------------------------------
+   Responsive
+   ---------------------------------------- */
+
+@media (max-width: 1024px) {
+    .estante-modal-cabecera {
+        padding: var(--esp-md) calc(var(--esp-lg) + 2.25rem) var(--esp-sm) var(--esp-lg);
+    }
+    .estante-modal-cuerpo   { padding: var(--esp-sm) var(--esp-lg) var(--esp-md); }
+}
+
+@media (max-width: 768px) {
+    .estante-escena { min-height: 260px; }
+    .estante-leyenda-pista { display: none; }
+    #estante-modal .modal-content { width: 100vw; height: 100dvh; border-radius: 0; }
+}
+
+/* En pantallas muy estrechas el 3D deja de compensar: ocupa mucho y se ve
+   poco. Se da prioridad al respaldo plano, que lista lo mismo y se lee. */
+@media (max-width: 480px) {
+    .estante-escena { min-height: 200px; }
+    .estante-plano-lomos { padding: var(--esp-sm); }
+}
+
+/* ----------------------------------------
+   Movimiento reducido
+   ---------------------------------------- */
+/* El bloque global de animations.css apaga transiciones, pero no toca lo que
+   dibuja WebGL. Aquí se apaga además el subrayado de hover del respaldo plano;
+   el mueble 3D se queda quieto porque estante3d.js solo anima ante un gesto
+   del usuario, nunca por su cuenta. */
+
+@media (prefers-reduced-motion: reduce) {
+    .estante-plano-lomo:hover { transform: none; }
+    .estante-plano-canto:hover { filter: none; }
+}
+
+/* ----------------------------------------
+   Sin resultados
+   ---------------------------------------- */
+.estante-vacio {
+    display: grid;
+    place-items: center;
+    height: 100%;
+    min-height: 240px;
+    padding: var(--esp-xl);
+    color: var(--tinta-tenue);
+    font-family: var(--fuente-titulo);
+    font-size: 1.15rem;
+    text-align: center;
+}
+
+/* ----------------------------------------
+   Pista flotante
+   ----------------------------------------
+   Los lomos del muro no llevan texto: a 16px de ancho no se leería, y serían
+   112 texturas para nada. El título vive aquí, en DOM real, colocado con
+   transform (no con top/left) para que el navegador no rehaga el layout en
+   cada movimiento del ratón. */
+
+.estante-pista {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 70;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-width: 260px;
+    padding: var(--esp-xs) var(--esp-sm);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio-sm);
+    background: var(--superficie-alta);
+    box-shadow: var(--luz-filo), var(--sombra-baja);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: var(--tinta-suave);
+}
+
+.estante-pista strong {
+    color: var(--tinta);
+    font-weight: 600;
+}
+
+.estante-pista-estado {
+    margin-top: 2px;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.estante-pista-estado.leido     { color: var(--leido); }
+.estante-pista-estado.leyendo   { color: var(--leyendo); }
+.estante-pista-estado.pendiente { color: var(--pendiente); }
+
+@media (prefers-reduced-motion: reduce) {
+    .estante-pista { transition: none; }
+}

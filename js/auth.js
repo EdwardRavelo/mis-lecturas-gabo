@@ -146,11 +146,14 @@ function mostrarBannerOffline(motivo) {
 
     if (texto) texto.textContent = motivo || 'Sin conexión con la nube.';
     banner.style.display = 'flex';
+    // El banner va fixed: sin esto taparía la leyenda y el botón del menú.
+    document.body.classList.add('con-banner');
 }
 
 function ocultarBannerOffline() {
     const banner = document.getElementById('offline-banner');
     if (banner) banner.style.display = 'none';
+    document.body.classList.remove('con-banner');
 }
 
 // ----------------------------------------
@@ -185,26 +188,21 @@ function onLogout() {
 function mostrarPantallaLogin() {
     const loginScreen = document.getElementById('login-screen');
     const appLayout = document.querySelector('.library-layout');
-    const mobileHeader = document.getElementById('mobile-header');
     if (loginScreen) loginScreen.classList.add('active');
     if (appLayout) appLayout.style.display = 'none';
-    if (mobileHeader) mobileHeader.style.display = 'none';
 }
 
 function ocultarPantallaLogin() {
     const loginScreen = document.getElementById('login-screen');
     const appLayout = document.querySelector('.library-layout');
-    const mobileHeader = document.getElementById('mobile-header');
     if (loginScreen) loginScreen.classList.remove('active');
     if (appLayout) appLayout.style.display = 'flex';
-    if (mobileHeader) mobileHeader.style.display = '';
 }
 
 function actualizarUIUsuario(usuario) {
     const userAvatar = document.getElementById('user-avatar');
     const userName = document.getElementById('user-name');
     const userMenu = document.getElementById('user-menu');
-    const mobileHeaderUser = document.getElementById('mobile-header-user');
 
     if (!userAvatar || !userName) return;
 
@@ -215,10 +213,8 @@ function actualizarUIUsuario(usuario) {
 
         if (avatarUrl) {
             userAvatar.innerHTML = `<img src="${avatarUrl}" alt="${nombre}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
-            if (mobileHeaderUser) mobileHeaderUser.innerHTML = `<img src="${avatarUrl}" alt="${nombre}" style="width:100%;height:100%;object-fit:cover;">`;
         } else {
             userAvatar.textContent = inicial;
-            if (mobileHeaderUser) mobileHeaderUser.textContent = inicial;
         }
 
         userName.textContent = nombre;
@@ -229,12 +225,10 @@ function actualizarUIUsuario(usuario) {
         userAvatar.textContent = '⬤';
         userName.textContent = 'Local';
         if (userMenu) userMenu.style.display = 'flex';
-        if (mobileHeaderUser) mobileHeaderUser.textContent = '⬤';
     } else {
         userAvatar.textContent = '?';
         userName.textContent = '';
         if (userMenu) userMenu.style.display = 'none';
-        if (mobileHeaderUser) mobileHeaderUser.textContent = '';
     }
 }
 

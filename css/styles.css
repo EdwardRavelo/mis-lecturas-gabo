@@ -1,83 +1,110 @@
 /* ========================================
    Diario de Lecturas — Sistema de diseño
    ========================================
-   "Papel y tinta": papel crudo y tinta negra cálida, tipografía editorial y
-   nada de decoración que cueste espacio. La identidad no cuelga de ningún
-   autor concreto: el color lo pone cada tema.
+   "Biblioteca": nogal oscuro, latón y luz de lámpara. Una habitación con
+   libros, no una hoja de papel. Sustituye a "Papel y tinta" (papel crudo +
+   Fraunces/DM Sans), jubilado en el rediseño del 2026-09-16.
 
-   Todo color vive aquí. Ni el CSS de más abajo ni js/charts.js repiten un
-   hex: cambiar de tema es reescribir este bloque y nada más.
+   El motivo del cambio es físico: la pieza central de la app es un mueble 3D
+   iluminado, y una página clara alrededor de una escena oscura se pelea
+   consigo misma. La luz de la escena y la de la interfaz son la misma.
+
+   Todo color vive aquí. js/charts.js y js/estante3d.js lo leen con token()
+   desde :root, así que la paleta llega sola a las gráficas y al WebGL.
 
    Los tres colores de estado están VALIDADOS con el validador de la skill
-   dataviz sobre papel, con --pairs all (los tres conviven en la barra
-   apilada de estados):
-     peor par  #B57C00 ↔ #007551  ΔE 10.4 protanopía · 21.1 visión normal
-     los tres  dentro de la banda L 0.43–0.77, sobre el suelo de croma, ≥3:1
-   Todos los checks en PASS, sin advertencias.
+   dataviz, --pairs all (los tres conviven en la barra apilada), contra las
+   DOS superficies sobre las que aparecen, #211A14 y #17120E:
+     peor par  #BE831C ↔ #2FA377  ΔE 9.8 protanopía · 17.6 visión normal
+     los tres  dentro de la banda L 0.48–0.67, sobre el suelo de croma, ≥3:1
+   Todos los checks en PASS.
 
-   OJO: esa validación es contra fondo CLARO. La paleta anterior se validó
-   sobre #171613, y por eso no se pudo reutilizar al pasar a papel: el verde
-   y el gris quedaban a ΔE 5.2 en protanopía. Si algún día se vuelve al tema
-   oscuro, hay que repetir el proceso, no invertir los valores.
+   OJO: esta validación es contra fondo OSCURO. La paleta anterior se validó
+   sobre papel (#FBF7F0) y NO se reutilizó al venir aquí: se rehízo desde
+   cero. Si algún día se vuelve a fondo claro, repetir el proceso — nunca
+   invertir ni aclarar estos valores a ojo.
    ======================================== */
 
 :root {
-    /* Superficies — papel */
-    --plano: #FBF7F0;             /* fondo de página, papel crudo */
-    --superficie: #FFFFFF;        /* tarjetas, panel, modal */
-    --superficie-alta: #F3ECE1;   /* hover, elementos elevados */
-    --superficie-suave: rgba(28, 24, 21, 0.045);
+    /* Superficies — nogal */
+    --plano: #17120E;             /* fondo de página */
+    --superficie: #211A14;        /* tarjetas, panel, modal */
+    --superficie-alta: #2C231B;   /* hover, elementos elevados */
+    --superficie-honda: #100C09;  /* huecos, interior del mueble */
+    --superficie-suave: rgba(244, 237, 227, 0.05);
 
-    /* Tinta */
-    --tinta: #1C1815;             /* texto principal, negro cálido */
-    --tinta-suave: #5B5249;       /* secundario */
-    --tinta-tenue: #938878;       /* ejes, etiquetas menores */
+    /* Tinta sobre madera */
+    --tinta: #F4EDE3;             /* texto principal, blanco cálido */
+    --tinta-suave: #C3B4A2;       /* secundario */
+    --tinta-tenue: #8C7C68;       /* ejes, etiquetas menores */
 
-    /* Líneas */
-    --borde: rgba(28, 24, 21, 0.13);
-    --borde-fuerte: rgba(28, 24, 21, 0.26);
-    --rejilla: rgba(28, 24, 21, 0.09);
+    /* Líneas: nunca un gris de 1px; siempre luz a muy baja opacidad */
+    --borde: rgba(244, 237, 227, 0.10);
+    --borde-fuerte: rgba(244, 237, 227, 0.22);
+    --rejilla: rgba(244, 237, 227, 0.07);
 
     /* Estados de lectura — validados, no tocar sin revalidar */
-    --leido: #007551;
-    --leyendo: #B57C00;
-    --pendiente: #6A4FC7;
+    --leido: #2FA377;
+    --leyendo: #BE831C;
+    --pendiente: #8676E0;
+
+    /* Los mismos en RGB, para tintes con alfa variable */
+    --leido-rgb: 47, 163, 119;
+    --leyendo-rgb: 190, 131, 28;
+    --pendiente-rgb: 134, 118, 224;
 
     /* Fondos tenues de los mismos estados, para chips y etiquetas */
-    --leido-wash: rgba(0, 117, 81, 0.11);
-    --leyendo-wash: rgba(181, 124, 0, 0.13);
-    --pendiente-wash: rgba(106, 79, 199, 0.11);
+    --leido-wash: rgba(47, 163, 119, 0.14);
+    --leyendo-wash: rgba(190, 131, 28, 0.16);
+    --pendiente-wash: rgba(134, 118, 224, 0.14);
 
-    /* Acento de la app; app.js lo sobrescribe con el color del tema activo.
-       Por defecto, el amarillo mariposa de donde viene el proyecto. */
-    --tema-acento: #B57C00;
+    /* Latón: el acento de la casa cuando ningún tema manda.
+       app.js sobrescribe --tema-acento con el color del tema activo. */
+    --laton: #C9A227;
+    --tema-acento: #C9A227;
 
-    --peligro: #B3261E;
-    --peligro-wash: rgba(179, 38, 30, 0.10);
+    /* Maderas del mueble. Las lee estante3d.js con token(), de modo que el
+       3D no repite un hex y cambia con la paleta. */
+    --madera-clara: #7A5335;
+    --madera: #4A3120;
+    --madera-honda: #2A1C12;
+
+    /* Alto del banner offline: lo usa body.con-banner para apartar el shell */
+    --alto-banner: 48px;
+
+    --peligro: #E0685E;
+    --peligro-wash: rgba(224, 104, 94, 0.12);
 
     /* Velo de modales y del cajón lateral en móvil */
-    --velo: rgba(28, 24, 21, 0.45);
+    --velo: rgba(10, 7, 5, 0.72);
 
-    /* Tipografía: serif para títulos (un diario, no un panel de control),
-       sans para todo lo que sea dato. */
-    --fuente-titulo: 'Fraunces', Georgia, serif;
-    --fuente-texto: 'DM Sans', system-ui, -apple-system, sans-serif;
+    /* Tipografía: serif de display de alto contraste para los momentos
+       grandes, grotesca geométrica para todo lo que sea dato. */
+    --fuente-titulo: 'Instrument Serif', 'Fraunces', Georgia, serif;
+    --fuente-texto: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 
+    /* Más aire que en la versión de papel: la pantalla respira */
     --esp-xs: 0.375rem;
     --esp-sm: 0.625rem;
     --esp-md: 1rem;
-    --esp-lg: 1.5rem;
-    --esp-xl: 2.25rem;
+    --esp-lg: 1.75rem;
+    --esp-xl: 3rem;
 
-    /* Radios pequeños: en papel, una esquina de 18px se lee como plástico */
-    --radio-sm: 4px;
-    --radio-md: 7px;
-    --radio-lg: 11px;
+    /* Radios mayores: sobre madera oscura una esquina viva se ve barata */
+    --radio-sm: 6px;
+    --radio-md: 12px;
+    --radio-lg: 20px;
 
-    --sombra: 0 10px 30px rgba(28, 24, 21, 0.14);
-    --transicion: 0.16s cubic-bezier(0.2, 0, 0.2, 1);
+    /* Sombras cálidas y difusas, nunca negro puro, más un filo de luz
+       interior que es lo que hace que un panel parezca una pieza física. */
+    --sombra: 0 24px 60px rgba(8, 5, 3, 0.55);
+    --sombra-baja: 0 2px 12px rgba(8, 5, 3, 0.40);
+    --luz-filo: inset 0 1px 0 rgba(244, 237, 227, 0.08);
 
-    --ancho-sidebar: 290px;
+    /* Curva propia, con masa. Nada de linear ni ease-in-out. */
+    --transicion: 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    --transicion-lenta: 0.6s cubic-bezier(0.32, 0.72, 0, 1);
+
 }
 
 /* ========================================
@@ -90,8 +117,8 @@ html {
     height: 100%;
 }
 
-/* La página no scrollea: lo hacen la sidebar, la rejilla y el modal, cada
-   uno por su cuenta. Ver "Layout" más abajo. */
+/* La página no scrollea: lo hacen el contenedor del mueble y el cuerpo del
+   modal, cada uno por su cuenta. Ver "Layout" más abajo. */
 body {
     height: 100%;
     background: var(--plano);
@@ -102,6 +129,12 @@ body {
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
 }
+
+/* El atributo hidden lo pone el navegador como display:none, pero cualquier
+   regla de autor con display: flex o grid le gana por especificidad. El menú
+   se abría siempre por esto. Con !important, hidden vuelve a significar
+   oculto y el JS puede seguir usándolo como interruptor. */
+[hidden] { display: none !important; }
 
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -121,10 +154,13 @@ img { max-width: 100%; display: block; }
 }
 
 /* ========================================
-   Layout: app shell de 100dvh
+   Layout: el mueble y nada más
    ========================================
-   La ventana se reparte de una vez y nada la desborda. Sólo scrollean la
-   sidebar, #books-grid y el cuerpo del modal.
+   La ventana entera es la estantería. No hay barra lateral, ni rejilla de
+   tarjetas, ni panel de análisis: todo eso se retiró en el recorte del
+   2026-09-26, porque repetía en widgets lo que el mueble ya dice solo.
+
+   Lo único fijo sobre la escena son el botón "···" y la leyenda de estados.
 
    OJO: .library-layout tiene que seguir funcionando como flex — auth.js le
    asigna `style.display = 'flex'` al ocultar el login, lo que pisaría
@@ -133,23 +169,9 @@ img { max-width: 100%; display: block; }
     display: flex;
     height: 100dvh;
     overflow: hidden;
+    position: relative;   /* ancla del menú flotante */
 }
 
-.sidebar {
-    width: var(--ancho-sidebar);
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--esp-lg);
-    padding: var(--esp-lg);
-    background: var(--superficie);
-    border-right: 1px solid var(--borde);
-    overflow-y: auto;
-}
-
-/* Columna: cabecera fija, rejilla elástica, panel de análisis abajo.
-   El padding ya no vive aquí, sino en cada bloque, porque si no el
-   contenedor con scroll recortaría por dentro del margen. */
 .main-content {
     flex: 1;
     min-width: 0;
@@ -158,1046 +180,221 @@ img { max-width: 100%; display: block; }
     overflow: hidden;
 }
 
-.sidebar-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 800;
-    background: var(--velo);
+/* El contenedor del mueble. Necesita min-height:0 por lo de siempre: sin él
+   un hijo flex se niega a encoger por debajo de su contenido y desbordaría
+   el shell entero. */
+#estante-raiz {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--esp-lg);
 }
-
-.sidebar-overlay.active { display: block; }
 
 /* ========================================
-   Cabecera del sidebar
-   ======================================== */
-.sidebar-header { position: relative; }
+   Menú "···"
+   ========================================
+   Todo lo que antes ocupaba la barra lateral vive aquí dentro: búsqueda,
+   filtro por estado, alta de temas y lecturas, respaldo y sesión. En reposo
+   la pantalla es solo el mueble; el menú es un gesto de dos pasos, que es
+   exactamente el trato que se aceptó al quitar el panel. */
 
-.decorative-line {
-    width: 32px;
-    height: 2px;
-    margin-bottom: var(--esp-sm);
-    background: var(--tema-acento);
-    transition: background var(--transicion);
-}
-
-.library-title {
-    font-family: var(--fuente-titulo);
-    font-size: 1.5rem;
-    font-weight: 600;
-    line-height: 1.15;
-    letter-spacing: -0.01em;
-}
-
-.library-subtitle {
-    margin-top: 0.15rem;
-    font-size: 0.75rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--tinta-tenue);
-}
-
-.decorative-butterfly {
+.menu-btn {
     position: absolute;
-    top: 0;
-    right: 0;
-    font-size: 1rem;
-    color: var(--tema-acento);
-    opacity: 0.5;
-}
-
-/* ========================================
-   Navegación por temas
-   ======================================== */
-.filter-title {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--tinta-tenue);
-}
-
-.temas-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--esp-sm);
-}
-
-.btn-nuevo-tema {
-    width: 24px;
-    height: 24px;
-    flex-shrink: 0;
+    top: var(--esp-md);
+    right: var(--esp-md);
+    z-index: 60;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    padding: 0;
     border: 1px solid var(--borde);
-    background: transparent;
+    border-radius: 50%;
+    background: var(--superficie);
     color: var(--tinta-suave);
-    font-size: 1rem;
+    font-size: 1.1rem;
     line-height: 1;
-    transition: all var(--transicion);
+    letter-spacing: 0.08em;
+    box-shadow: var(--luz-filo), var(--sombra-baja);
+    transition: background var(--transicion), color var(--transicion),
+                transform var(--transicion);
 }
 
-.btn-nuevo-tema:hover {
-    background: var(--tema-acento);
-    border-color: var(--tema-acento);
-    color: var(--plano);
-}
-
-.temas-list {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.tema-btn {
-    display: flex;
-    align-items: center;
-    gap: var(--esp-sm);
-    width: 100%;
-    padding: 0.45rem 0.6rem;
-    border-radius: var(--radio-sm);
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--tinta-suave);
-    font-size: 0.87rem;
-    text-align: left;
-    transition: all var(--transicion);
-}
-
-.tema-btn:hover { background: var(--superficie-suave); color: var(--tinta); }
-
-.tema-btn.active {
+.menu-btn:hover {
     background: var(--superficie-alta);
-    border-color: var(--borde);
     color: var(--tinta);
-    font-weight: 500;
 }
 
-.tema-punto {
-    width: 7px;
-    height: 7px;
-    flex-shrink: 0;
-    border-radius: 50%;
+/* Se hunde al pulsar, como una tecla */
+.menu-btn:active { transform: scale(0.94); }
+
+.menu-btn[aria-expanded="true"] {
+    background: var(--superficie-alta);
+    color: var(--tinta);
+    border-color: var(--tema-acento);
 }
 
-.tema-nombre {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+/* Velo que captura el click fuera. Sin fondo visible: el menú no es un modal,
+   no debe oscurecer el mueble que estás mirando. */
+.menu-velo {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: transparent;
 }
 
-.tema-count {
-    flex-shrink: 0;
-    font-size: 0.72rem;
-    font-variant-numeric: tabular-nums;
-    color: var(--tinta-tenue);
-}
-
-.tema-editar {
-    flex-shrink: 0;
-    opacity: 0;
-    padding: 0 0.15rem;
-    font-size: 0.78rem;
-    color: var(--tinta-tenue);
-    transition: opacity var(--transicion), color var(--transicion);
-}
-
-.tema-btn:hover .tema-editar { opacity: 1; }
-.tema-editar:hover { color: var(--tema-acento); }
-
-/* ========================================
-   Estadísticas
-   ======================================== */
-.stats-compact {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 2px;
-    padding: 2px;
-    border-radius: var(--radio-md);
-    background: var(--superficie-suave);
-}
-
-.stat-item {
+.menu-panel {
+    position: absolute;
+    top: calc(var(--esp-md) + 48px);
+    right: var(--esp-md);
+    z-index: 60;
+    width: min(320px, calc(100vw - 2 * var(--esp-md)));
+    max-height: min(78dvh, 720px);
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 0.1rem;
-    padding: var(--esp-sm) 0.25rem;
-    border-radius: var(--radio-sm);
-    text-align: center;
-    transition: background var(--transicion);
+    gap: var(--esp-md);
+
+    /* Doble bisel: carcasa con filo de luz y fondo elevado, para que se lea
+       como una pieza apoyada sobre la escena y no como un rectángulo. */
+    padding: var(--esp-md);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio-lg);
+    background: var(--superficie);
+    box-shadow: var(--luz-filo), var(--sombra);
 }
 
-.stat-item.clickeable { cursor: pointer; }
-.stat-item.clickeable:hover { background: var(--superficie-alta); }
-.stat-item.active { background: var(--superficie-alta); }
-
-.stat-value {
-    font-size: 1.15rem;
-    font-weight: 600;
-    line-height: 1.1;
-}
-
-.stat-label {
-    font-size: 0.62rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--tinta-tenue);
-}
-
-/* ========================================
-   Filtros y búsqueda
-   ======================================== */
-.filter-buttons-vertical {
+.menu-seccion {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-top: var(--esp-sm);
+    flex-direction: column;
+    gap: var(--esp-xs);
 }
 
-.filter-btn {
-    padding: 0.3rem 0.7rem;
-    border-radius: 999px;
-    border: 1px solid var(--borde);
-    background: transparent;
-    color: var(--tinta-suave);
-    font-size: 0.78rem;
-    transition: all var(--transicion);
-}
-
-.filter-btn:hover { border-color: var(--borde-fuerte); color: var(--tinta); }
-
-.filter-btn.active {
-    background: var(--tinta);
-    border-color: var(--tinta);
-    color: var(--plano);
-    font-weight: 500;
-}
-
-.search-input {
-    width: 100%;
-    padding: 0.55rem 0.8rem;
-    border-radius: var(--radio-sm);
-    border: 1px solid var(--borde);
-    background: var(--plano);
-    color: var(--tinta);
-    font-size: 0.85rem;
-    transition: border-color var(--transicion);
-}
-
-.search-input::placeholder { color: var(--tinta-tenue); }
-.search-input:focus { outline: none; border-color: var(--tema-acento); }
-
-/* ========================================
-   Respaldo y usuario
-   ======================================== */
-.backup-buttons { display: flex; gap: 6px; margin-top: var(--esp-sm); }
-
-.backup-btn {
-    flex: 1;
-    padding: 0.45rem;
-    border-radius: var(--radio-sm);
-    border: 1px solid var(--borde);
-    background: transparent;
-    color: var(--tinta-suave);
-    font-size: 0.75rem;
-    transition: all var(--transicion);
-}
-
-.backup-btn:hover { background: var(--superficie-alta); color: var(--tinta); }
-
-.user-menu {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--esp-sm);
-    margin-top: auto;
+.menu-seccion + .menu-seccion {
     padding-top: var(--esp-md);
     border-top: 1px solid var(--borde);
 }
 
-.user-info {
+.menu-titulo {
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+}
+
+.menu-buscar {
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--borde);
+    border-radius: var(--radio-md);
+    background: var(--superficie-honda);
+    color: var(--tinta);
+    font-size: 0.88rem;
+    transition: border-color var(--transicion);
+}
+
+.menu-buscar::placeholder { color: var(--tinta-tenue); }
+.menu-buscar:focus { outline: none; border-color: var(--tema-acento); }
+
+.menu-filtros {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--esp-xs);
+}
+
+.menu-filtro {
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--borde);
+    border-radius: var(--radio-sm);
+    background: transparent;
+    color: var(--tinta-suave);
+    font-size: 0.78rem;
+    transition: background var(--transicion), color var(--transicion),
+                border-color var(--transicion);
+}
+
+.menu-filtro:hover { background: var(--superficie-alta); color: var(--tinta); }
+
+.menu-filtro.active {
+    background: var(--superficie-alta);
+    border-color: var(--tema-acento);
+    color: var(--tinta);
+}
+
+.menu-accion {
     display: flex;
     align-items: center;
     gap: var(--esp-sm);
-    min-width: 0;
+    width: 100%;
+    padding: 0.5rem 0.6rem;
+    border: 0;
+    border-radius: var(--radio-sm);
+    background: transparent;
+    color: var(--tinta-suave);
+    font-size: 0.85rem;
+    text-align: left;
+    transition: background var(--transicion), color var(--transicion);
 }
 
-.user-avatar {
-    width: 30px;
-    height: 30px;
-    flex-shrink: 0;
+.menu-accion:hover:not(:disabled) { background: var(--superficie-alta); color: var(--tinta); }
+
+/* Sin sesión no hay id de servidor que dar a un tema o a un libro nuevo. Se
+   ve que la acción existe y que ahora no está disponible, en vez de dejar
+   pulsar y contestar con un alert. */
+.menu-accion:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+}
+
+.menu-nota {
+    padding: var(--esp-xs) 0.6rem;
+    color: var(--tinta-tenue);
+    font-size: 0.72rem;
+    line-height: 1.45;
+}
+.menu-accion.peligro:hover { background: var(--peligro-wash); color: var(--peligro); }
+
+.menu-accion-icono {
+    flex: 0 0 1.1rem;
+    color: var(--tinta-tenue);
+    font-size: 0.95rem;
+    text-align: center;
+}
+
+.menu-accion:hover .menu-accion-icono { color: var(--tema-acento); }
+
+/* Identidad al pie del menú */
+.menu-usuario {
+    display: flex;
+    align-items: center;
+    gap: var(--esp-sm);
+    padding: 0.35rem 0.6rem;
+}
+
+.menu-avatar {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
     border-radius: 50%;
-    background: var(--superficie-alta);
-    font-size: 0.8rem;
-    font-weight: 600;
     overflow: hidden;
+    background: var(--superficie-alta);
+    color: var(--tinta-suave);
+    font-size: 0.72rem;
+    font-weight: 600;
 }
 
-.user-name {
+.menu-nombre {
     font-size: 0.82rem;
     color: var(--tinta-suave);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-
-.btn-logout {
-    flex-shrink: 0;
-    display: flex;
-    padding: 0.35rem;
-    border: none;
-    border-radius: var(--radio-sm);
-    background: transparent;
-    color: var(--tinta-tenue);
-    transition: all var(--transicion);
-}
-
-.btn-logout:hover { background: var(--superficie-alta); color: var(--peligro); }
-
-/* ========================================
-   Cabecera de sección
-   ======================================== */
-.section-header {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--esp-md);
-    flex-wrap: wrap;
-    padding: var(--esp-md) var(--esp-xl);
-    border-bottom: 1px solid var(--borde);
-}
-
-.section-title {
-    font-family: var(--fuente-titulo);
-    font-size: 1.35rem;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-}
-
-.view-options { display: flex; align-items: center; gap: var(--esp-sm); }
-
-.btn-nuevo-libro {
-    padding: 0.4rem 0.85rem;
-    border-radius: var(--radio-sm);
-    border: 1px solid var(--tema-acento);
-    background: transparent;
-    color: var(--tema-acento);
-    font-size: 0.8rem;
-    font-weight: 500;
-    transition: all var(--transicion);
-}
-
-.btn-nuevo-libro:hover { background: var(--tema-acento); color: var(--plano); }
-
-.view-btn {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radio-sm);
-    border: 1px solid var(--borde);
-    background: transparent;
-    color: var(--tinta-tenue);
-    transition: all var(--transicion);
-}
-
-.view-btn:hover { color: var(--tinta); }
-.view-btn.active { background: var(--superficie-alta); color: var(--tinta); }
-
-/* ========================================
-   Rejilla de libros
-   ======================================== */
-/* Rejilla densa: en vez de 3 columnas fijas, tantas como quepan a partir de
-   165px. En pantalla ancha pasa de 3 a 6-7 tarjetas por fila, así que la
-   portada baja a menos de la mitad de alto y el scroll se desploma. */
-/* Este es el bloque con scroll del shell: `min-height: 0` es obligatorio,
-   porque sin él un hijo flex se niega a encoger por debajo de su contenido
-   y sería el shell entero el que desbordaría. */
-.books-section {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.books-grid {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding: var(--esp-md) var(--esp-xl) var(--esp-lg);
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: var(--esp-md);
-    align-content: start;
-}
-
-.grid-vacio {
-    grid-column: 1 / -1;
-    padding: 3.5rem 1rem;
-    text-align: center;
-    color: var(--tinta-tenue);
-    font-size: 0.9rem;
-}
-
-/* ----------------------------------------
-   Agrupado por subtema
-   ----------------------------------------
-   Cuando hay subtemas, el contenedor deja de ser la rejilla y pasa a ser una
-   pila de secciones; cada sección lleva su propia rejilla. Así las tarjetas
-   se alinean DENTRO de su grupo y no a través de grupos distintos. */
-.books-grid.agrupado {
-    display: flex;
-    flex-direction: column;
-    gap: var(--esp-xl);
-}
-
-.subtema-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: var(--esp-md);
-}
-
-.subtema-titulo {
-    display: flex;
-    align-items: center;
-    gap: var(--esp-sm);
-    margin-bottom: var(--esp-md);
-    padding-bottom: var(--esp-xs);
-    border-bottom: 1px solid var(--borde);
-    font-family: var(--fuente-titulo);
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: var(--tinta-suave);
-}
-
-.subtema-count {
-    padding: 0.05rem 0.45rem;
-    border-radius: 999px;
-    background: var(--superficie-suave);
-    font-family: var(--fuente-texto);
-    font-size: 0.68rem;
-    font-variant-numeric: tabular-nums;
-    color: var(--tinta-tenue);
-}
-
-.book-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    border-radius: var(--radio-md);
-    border: 1px solid var(--borde);
-    background: var(--superficie);
-    overflow: hidden;
-    cursor: pointer;
-    transition: transform var(--transicion), border-color var(--transicion);
-}
-
-.book-card:hover {
-    transform: translateY(-3px);
-    border-color: var(--borde-fuerte);
-}
-
-/* Franja de estado: identidad sin depender solo del texto */
-.book-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 3px;
-    height: 100%;
-    z-index: 2;
-}
-
-.book-card.estado-leido::before { background: var(--leido); }
-.book-card.estado-leyendo::before { background: var(--leyendo); }
-.book-card.estado-pendiente::before { background: var(--pendiente); }
-
-.book-card-actions {
-    position: absolute;
-    top: var(--esp-sm);
-    right: var(--esp-sm);
-    z-index: 3;
-    display: flex;
-    gap: 4px;
-    opacity: 0;
-    transition: opacity var(--transicion);
-}
-
-.book-card:hover .book-card-actions { opacity: 1; }
-
-.quick-action-btn {
-    width: 22px;
-    height: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    border: 1px solid var(--borde-fuerte);
-    /* Van encima de la portada, que es una imagen cualquiera: hace falta un
-       fondo propio y opaco, no una superficie translúcida del tema. */
-    background: rgba(255, 255, 255, 0.94);
-    color: var(--tinta-suave);
-    font-size: 0.72rem;
-    backdrop-filter: blur(6px);
-    transition: all var(--transicion);
-}
-
-.quick-action-leido:hover { background: var(--leido); border-color: var(--leido); color: var(--plano); }
-.quick-action-leyendo:hover { background: var(--leyendo); border-color: var(--leyendo); color: var(--plano); }
-.quick-action-pendiente:hover { background: var(--pendiente); border-color: var(--pendiente); color: var(--plano); }
-
-/* Portada cuadrada, no 3:4. Seguir estrechando la tarjeta encogía también el
-   título; romper la proporción encoge SOLO la imagen y libera ese espacio
-   para el texto. Se recorta arriba, donde las portadas llevan el título. */
-.book-cover-wrapper {
-    aspect-ratio: 1 / 1;
-    background: var(--superficie-alta);
-    overflow: hidden;
-}
-
-.book-cover {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center 32%;
-}
-
-.book-cover-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2rem;
-    opacity: 0.25;
-}
-
-/* El título va primero; año, páginas y estado caen debajo en una sola línea
-   de metadatos, pequeña y tenue, para no disputarle protagonismo.
-   `flex: 1` hace que el bloque ocupe todo el alto sobrante de la tarjeta,
-   que es lo que permite anclar los metadatos abajo. */
-.book-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-    padding: 0.7rem var(--esp-sm) var(--esp-sm);
-    padding-left: calc(var(--esp-sm) + 3px);
-}
-
-/* ANCLADOS AL FONDO.
-   Un título ocupa 1, 2 o 3 líneas según su largo, así que si los metadatos
-   colgasen de él arrancarían a distinta altura en cada tarjeta y la fila se
-   vería dentada. La rejilla ya iguala el alto de las tarjetas de una misma
-   fila (align-items: stretch por defecto), de modo que empujarlos al fondo
-   con margin-top:auto los alinea perfectamente entre sí. */
-.book-meta {
-    margin-top: auto;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-    font-size: 0.64rem;
-    color: var(--tinta-tenue);
-}
-
-.book-year { font-variant-numeric: tabular-nums; letter-spacing: 0.05em; }
-
-/* El estado ya lo lleva la franja lateral de color; va también como texto
-   para que la identidad nunca dependa solo del color. */
-.book-status {
-    padding: 0;
-    background: none !important;
-    font-size: 0.64rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-}
-
-.status-leido { background: var(--leido-wash); color: var(--leido); }
-.status-leyendo { background: var(--leyendo-wash); color: var(--leyendo); }
-.status-pendiente { background: var(--pendiente-wash); color: var(--pendiente); }
-
-/* El protagonista de la tarjeta. Tres líneas como tope: sin él, un título
-   largo estira su tarjeta y desalinea la fila entera. */
-.book-title {
-    font-family: var(--fuente-titulo);
-    font-size: 1.02rem;
-    font-weight: 700;
-    line-height: 1.22;
-    letter-spacing: -0.01em;
-    color: var(--tinta);
-    /* Una palabra sin espacios más ancha que la tarjeta desbordaría en
-       horizontal; el clamp solo controla el alto. */
-    overflow-wrap: anywhere;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.book-pages { white-space: nowrap; }
-
-/* Presente en TODAS las tarjetas, también en las pendientes. Antes solo se
-   dibujaba con progreso > 0, así que las pendientes tenían un elemento menos
-   y la fila quedaba descuadrada. Con la pista siempre visible, todas las
-   tarjetas comparten la misma estructura y cierran a la misma altura. */
-.book-progress {
-    height: 3px;
-    margin-top: 0.4rem;
-    border-radius: 999px;
-    background: var(--superficie-suave);
-    overflow: hidden;
-}
-
-/* El relleno toma el color del estado. Antes era amarillo para todos,
-   incluidos los libros ya leídos, lo cual contradecía al resto de la tarjeta. */
-.book-progress-bar {
-    height: 100%;
-    border-radius: 999px;
-    background: var(--tinta-tenue);
-    transition: width var(--transicion);
-}
-
-.book-card.estado-leido .book-progress-bar { background: var(--leido); }
-.book-card.estado-leyendo .book-progress-bar { background: var(--leyendo); }
-
-/* ----------------------------------------
-   Vista lista — densa
-   ----------------------------------------
-   Pensada para recorrer cientos de entradas y para el material que no es
-   ficción: documentación, cursos y artículos no tienen portada útil y sí
-   títulos largos, así que aquí manda el texto y la miniatura casi desaparece.
-   Fila de ~38px frente a los ~92px de antes. */
-.books-grid.view-list { grid-template-columns: 1fr; gap: 0; }
-
-/* La rejilla de cada subtema también pasa a una columna: sin esto, agrupar
-   por subtema anulaba la vista lista y las tarjetas seguían en mosaico. */
-.books-grid.view-list .subtema-grid {
-    grid-template-columns: 1fr;
-    gap: 0;
-}
-
-/* Filas separadas por una línea fina, no tarjetas sueltas: el marco de cada
-   tarjeta metía ruido y altura por fila. */
-.books-grid.view-list .book-card {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--esp-sm);
-    padding: 0.3rem var(--esp-sm);
-    border: none;
-    border-bottom: 1px solid var(--borde);
-    border-radius: 0;
-    background: transparent;
-}
-
-.books-grid.view-list .book-card:hover {
-    transform: none;
-    background: var(--superficie-suave);
-}
-
-/* La franja de estado pasa de barra lateral a marca fina al inicio de la fila */
-.books-grid.view-list .book-card::before {
-    height: 60%;
-    top: 20%;
-    border-radius: 999px;
-}
-
-.books-grid.view-list .book-cover-wrapper {
-    width: 22px;
-    flex-shrink: 0;
-    aspect-ratio: 3 / 4;
-    margin-left: var(--esp-xs);
-    border-radius: 3px;
-}
-
-.books-grid.view-list .book-cover-placeholder {
-    font-size: 0.7rem;
-    animation: none;
-}
-
-.books-grid.view-list .book-info {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: row;
-    align-items: baseline;
-    gap: var(--esp-md);
-    padding: 0;
-}
-
-/* Una sola línea con puntos suspensivos: la altura de fila deja de depender
-   del largo del título, que es lo que hacía ilegible la lista. */
-.books-grid.view-list .book-title {
-    flex: 1;
-    min-width: 0;
-    display: block;
-    font-size: 0.86rem;
-    font-weight: 600;
-    line-height: 1.4;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.books-grid.view-list .book-meta {
-    margin-top: 0;
-    flex: 0 0 auto;
-    flex-wrap: nowrap;
-    justify-content: flex-end;
-    font-size: 0.68rem;
-}
-
-.books-grid.view-list .book-progress { display: none; }
-
-/* Las acciones rápidas se colocan al final de la fila, no sobre la portada */
-.books-grid.view-list .book-card-actions {
-    position: static;
-    flex-shrink: 0;
-    margin-left: var(--esp-sm);
-}
-
-/* ========================================
-   Análisis: pestañas, timeline, gráficas
-   ======================================== */
-/* Panel anclado al pie del shell y PLEGADO por defecto: el timeline y las
-   gráficas son consulta ocasional, la rejilla es el trabajo diario. Cerrado
-   sólo cuesta la altura de su propia pestaña. */
-.analysis-section {
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    border-top: 1px solid var(--borde);
-    background: var(--superficie);
-}
-
-.analysis-toggle {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--esp-sm);
-    padding: var(--esp-sm) var(--esp-xl);
-    border: none;
-    background: none;
-    color: var(--tinta-suave);
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    transition: color var(--transicion);
-}
-
-.analysis-toggle:hover { color: var(--tinta); }
-
-.analysis-toggle .chevron {
-    display: flex;
-    transition: transform var(--transicion);
-}
-
-.analysis-section.open .analysis-toggle .chevron { transform: rotate(180deg); }
-
-.analysis-body {
-    display: none;
-    flex-direction: column;
-    min-height: 0;
-    max-height: 42vh;
-    border-top: 1px solid var(--borde);
-}
-
-.analysis-section.open .analysis-body { display: flex; }
-
-.tabs {
-    flex-shrink: 0;
-    display: flex;
-    gap: var(--esp-lg);
-    padding: 0 var(--esp-xl);
-    border-bottom: 1px solid var(--borde);
-}
-
-.tab-btn {
-    padding: 0 0 var(--esp-sm);
-    border: none;
-    border-bottom: 2px solid transparent;
-    background: none;
-    color: var(--tinta-tenue);
-    font-size: 0.85rem;
-    transition: all var(--transicion);
-}
-
-.tab-btn:hover { color: var(--tinta-suave); }
-
-.tab-btn.active {
-    border-bottom-color: var(--tema-acento);
-    color: var(--tinta);
-    font-weight: 500;
-}
-
-.tab-content { display: none; }
-
-.tab-content.active {
-    display: block;
-    min-height: 0;
-    overflow-y: auto;
-    padding: var(--esp-lg) var(--esp-xl);
-}
-
-/* Timeline: cronología de lectura, del más reciente al más antiguo.
-   El scroll lo lleva ahora .tab-content, que conoce el alto real del panel;
-   un max-height fijo aquí competiría con él. */
-.timeline {
-    position: relative;
-    padding-left: var(--esp-lg);
-}
-
-.timeline-line {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 5px;
-    width: 1px;
-    background: var(--borde);
-}
-
-.timeline-item {
-    position: relative;
-    display: grid;
-    /* La primera columna lleva la fecha COMPLETA ("24/septiembre/2026"), no
-       un año: con 8.5rem se partía en dos líneas y descuadraba la fila. */
-    grid-template-columns: 9.5rem minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--esp-md);
-    padding: 0.6rem 0;
-    cursor: pointer;
-    transition: opacity var(--transicion);
-}
-
-.timeline-item:hover { opacity: 0.75; }
-
-.timeline-dot {
-    position: absolute;
-    left: calc(-1 * var(--esp-lg) + 2px);
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--tinta-tenue);
-    /* Anillo del color de la superficie: separa el punto de la línea sin
-       dibujar un borde (regla de marcas de dataviz). */
-    box-shadow: 0 0 0 3px var(--superficie);
-}
-
-.timeline-dot.leido { background: var(--leido); }
-.timeline-dot.leyendo { background: var(--leyendo); }
-.timeline-dot.pendiente { background: var(--pendiente); }
-
-.timeline-year {
-    font-size: 0.76rem;
-    font-variant-numeric: tabular-nums;
-    color: var(--tinta-tenue);
-    white-space: nowrap;
-}
-
-.timeline-title {
-    font-family: var(--fuente-titulo);
-    font-size: 0.92rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.timeline-status {
-    padding: 0.1rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.65rem;
-    font-weight: 600;
-}
-
-.timeline-status.leido { background: var(--leido-wash); color: var(--leido); }
-.timeline-status.leyendo { background: var(--leyendo-wash); color: var(--leyendo); }
-.timeline-status.pendiente { background: var(--pendiente-wash); color: var(--pendiente); }
-
-/* Lecturas sin fecha: van al final, separadas, porque son reales pero no
-   son hitos — no se pueden ordenar en el tiempo. */
-.timeline-separador {
-    margin: var(--esp-md) 0 var(--esp-xs);
-    padding-top: var(--esp-md);
-    border-top: 1px solid var(--borde);
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--tinta-tenue);
-}
-
-/* Aquí no hay línea de tiempo detrás, así que el punto se vacía: relleno
-   sólido insinuaría una posición en el eje que no existe. */
-.timeline-sin-fecha .timeline-dot {
-    background: transparent;
-    box-shadow: inset 0 0 0 1.5px var(--borde-fuerte);
-}
-
-.timeline-sin-fecha .timeline-year {
-    color: var(--tinta-tenue);
-    opacity: 0.55;
-}
-
-/* Gráficas */
-.chart-mini-title,
-.chart-title-small {
-    margin-bottom: var(--esp-sm);
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--tinta-tenue);
-}
-
-.chart-container-small { min-width: 0; }
-
-/* Altura FIJA, no min-height.
-   Chart.js corre con maintainAspectRatio:false y mide el contenedor del
-   canvas para dimensionarlo. Si ese contenedor tiene altura automática, el
-   canvas lo hace crecer, el ResizeObserver dispara, el canvas vuelve a
-   crecer… y sale la barra infinita. Con una altura fija el ciclo se corta.
-   El alto da para el gráfico MÁS la banda del eje: si se queda corto, la
-   tarjeta genera un scroll diminuto (anti-patrón documentado). */
-.chart-caja {
-    position: relative;
-    height: 210px;
-}
-
-.charts-grid-compact {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--esp-xl);
-    align-items: start;
-}
-
-/* Aviso de cobertura de datos: cuántas lecturas no puede mostrar la gráfica.
-   No es decoración — sin él, dos barras parecen todo el historial. */
-.nota-datos {
-    margin-top: var(--esp-sm);
-    font-size: 0.72rem;
-    line-height: 1.4;
-    color: var(--tinta-tenue);
-}
-
-/* ----------------------------------------
-   Progreso por tema — barras apiladas horizontales
-   ---------------------------------------- */
-.progreso-temas {
-    display: flex;
-    flex-direction: column;
-    gap: var(--esp-sm);
-}
-
-.progreso-fila {
-    display: grid;
-    grid-template-columns: minmax(0, 7rem) minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--esp-sm);
-}
-
-.progreso-nombre {
-    font-size: 0.78rem;
-    color: var(--tinta-suave);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.progreso-barra {
-    display: flex;
-    gap: 2px;                 /* hueco de superficie entre segmentos */
-    height: 12px;
-    border-radius: 3px;
-    overflow: hidden;
-    background: var(--superficie-suave);
-}
-
-.progreso-seg { min-width: 2px; }
-
-.progreso-valor {
-    font-size: 0.72rem;
-    font-variant-numeric: tabular-nums;
-    color: var(--tinta-tenue);
-    white-space: nowrap;
-}
-
-/* Dos clases a propósito: .estado-leyenda se declara más abajo con la misma
-   especificidad y, al ir después, ganaría la cascada. */
-.estado-leyenda.progreso-leyenda {
-    margin-top: var(--esp-md);
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: var(--esp-md);
-}
-
-/* En horizontal el nombre no debe estirarse para llenar la fila */
-.progreso-leyenda .estado-leyenda-nombre { flex: 0 0 auto; }
-
-/* ========================================
-   Barra apilada de estados (sidebar)
-   ========================================
-   Sustituye al doughnut: part-to-whole se lee mejor en barra apilada, y en
-   una columna estrecha además cunde mucho más. */
-.estado-barra {
-    display: flex;
-    gap: 2px;                 /* hueco de superficie, no borde */
-    height: 8px;
-    margin-bottom: var(--esp-sm);
-    border-radius: 999px;
-    overflow: hidden;
-}
-
-.estado-segmento {
-    height: 100%;
-    min-width: 2px;
-    transition: opacity var(--transicion);
-}
-
-.estado-segmento:hover { opacity: 0.8; }
-
-.estado-leyenda {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-}
-
-.estado-leyenda-fila {
-    display: flex;
-    align-items: center;
-    gap: var(--esp-sm);
-    font-size: 0.76rem;
-    color: var(--tinta-suave);
-}
-
-.estado-leyenda-punto {
-    width: 8px;
-    height: 8px;
-    flex-shrink: 0;
-    border-radius: 2px;
-}
-
-.estado-leyenda-nombre { flex: 1; }
-
-/* El valor va en tinta, nunca en el color de la serie */
-.estado-leyenda-valor {
-    font-variant-numeric: tabular-nums;
-    color: var(--tinta);
-}
-
 /* ========================================
    Modales
    ======================================== */
@@ -1543,7 +740,7 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 .btn-full { width: 100%; }
 
 .btn-primary { background: var(--tinta); color: var(--plano); }
-.btn-primary:hover { background: #000; }
+.btn-primary:hover { background: var(--tinta); color: var(--plano); }
 
 .btn-peligro {
     margin-top: var(--esp-sm);
@@ -1802,7 +999,7 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 }
 
 .login-btn-github { background: var(--tinta); border-color: var(--tinta); color: var(--plano); }
-.login-btn-github:hover { background: #000; }
+.login-btn-github:hover { background: var(--superficie-alta); }
 
 .login-btn-google:hover { background: var(--superficie-alta); color: var(--tinta); }
 
@@ -1824,6 +1021,16 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 /* ========================================
    Banner offline
    ======================================== */
+/* El banner va fixed sobre todo lo demás, así que el shell tiene que
+   apartarse o le tapa los primeros 48px. Antes daba igual porque ahí solo
+   había el título de la barra lateral; ahora ahí viven la leyenda y el
+   botón del menú, y quedaban debajo. auth.js enciende y apaga la clase
+   junto con el propio banner. */
+body.con-banner .library-layout {
+    height: calc(100dvh - var(--alto-banner));
+    margin-top: var(--alto-banner);
+}
+
 .offline-banner {
     position: fixed;
     top: 0;
@@ -1864,108 +1071,33 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 .offline-banner-btn:hover { background: color-mix(in srgb, var(--leyendo) 20%, transparent); }
 
 /* ========================================
-   Cabecera móvil
-   ======================================== */
-/* Altura fija y conocida: el shell se la resta a 100dvh para no desbordar
-   (ver la media query de 768px). */
-.mobile-header {
-    display: none;
-    flex-shrink: 0;
-    height: 48px;
-    z-index: 700;
-    align-items: center;
-    gap: var(--esp-md);
-    padding: 0 var(--esp-md);
-    background: var(--superficie);
-    border-bottom: 1px solid var(--borde);
-}
-
-.mobile-menu-btn {
-    display: flex;
-    padding: 0.3rem;
-    border: none;
-    background: none;
-    color: var(--tinta);
-}
-
-.mobile-header-title {
-    flex: 1;
-    font-family: var(--fuente-titulo);
-    font-size: 1rem;
-    font-weight: 600;
-}
-
-.mobile-header-user {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: var(--superficie-alta);
-    font-size: 0.75rem;
-    overflow: hidden;
-}
-
-/* ========================================
    Responsive
    ======================================== */
-/* El padding horizontal ya no está en .main-content, sino en cada bloque
-   del shell, así que en cada corte hay que moverlos todos a la vez. */
+/* Ya no hay que mover el padding de cinco bloques a la vez en cada corte: con
+   la barra lateral y la rejilla fuera, el shell es el contenedor del mueble y
+   poco más. El propio estante trae sus cortes en css/estante.css. */
+
 @media (max-width: 1024px) {
-    :root { --ancho-sidebar: 250px; }
-    .books-grid,
-    .subtema-grid { grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); }
-
-    .section-header,
-    .books-grid,
-    .analysis-toggle,
-    .tabs,
-    .tab-content.active {
-        padding-left: var(--esp-lg);
-        padding-right: var(--esp-lg);
-    }
-
+    #estante-raiz { padding: var(--esp-md); }
     .modal-columnas { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
-    .mobile-header { display: flex; }
+    /* Ya no existe la cabecera móvil: no había cajón lateral que abrir, así
+       que el shell vuelve a ser la ventana entera. */
+    #estante-raiz { padding: var(--esp-sm); }
 
-    /* El header móvil vive fuera de .library-layout, así que el shell sólo
-       puede ocupar el resto; si no, la suma desborda la ventana. */
-    .library-layout { height: calc(100dvh - 48px); }
-
-    .sidebar {
-        position: fixed;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        z-index: 850;
-        width: 82vw;
-        max-width: 300px;
-        transform: translateX(-100%);
-        transition: transform var(--transicion);
+    .menu-btn {
+        top: var(--esp-sm);
+        right: var(--esp-sm);
     }
 
-    .sidebar.sidebar-open { transform: translateX(0); }
-
-    /* En móvil, dos por fila en vez de una: una columna con portada grande
-       era precisamente el scroll interminable que había que cortar. */
-    .books-grid,
-    .subtema-grid { grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); }
-
-    .section-header,
-    .books-grid,
-    .analysis-toggle,
-    .tabs,
-    .tab-content.active {
-        padding-left: var(--esp-md);
-        padding-right: var(--esp-md);
+    .menu-panel {
+        top: calc(var(--esp-sm) + 48px);
+        right: var(--esp-sm);
+        left: var(--esp-sm);
+        width: auto;
     }
-
-    .section-title { font-size: 1.15rem; }
-    .analysis-body { max-height: 50vh; }
 
     .modal { padding: 0; align-items: flex-end; }
 
@@ -1978,19 +1110,11 @@ textarea.form-input { resize: vertical; min-height: 80px; }
     .modal-cabecera { padding: var(--esp-md); padding-right: 3rem; }
     .modal-portada { width: 54px; height: 78px; }
     .comentarios-textarea { min-height: 130px; }
-
-    .timeline-item { grid-template-columns: 1fr auto; row-gap: 0.15rem; }
-    .timeline-year { grid-column: 1 / -1; }
-
-    .books-grid.view-list .book-info { grid-template-columns: 1fr auto; }
-
-    /* Las acciones rápidas viven en hover, que en táctil no existe */
-    .book-card-actions { opacity: 1; }
 }
 
 @media (max-width: 480px) {
     .form-row { grid-template-columns: 1fr; }
-    .stats-compact { grid-template-columns: repeat(2, 1fr); }
+    .menu-filtros { grid-template-columns: 1fr; }
 
     /* La tira de progreso se parte: las tres fechas arriba, la barra debajo
        a lo ancho, en vez de estrujarse en una fila de 320px. */
@@ -2006,7 +1130,6 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 /* ========================================
    Utilidades
    ======================================== */
-.clickeable { cursor: pointer; }
 
 /* Enlace al recurso, en la cabecera del modal de lectura */
 .modal-enlace {
@@ -2026,74 +1149,4 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 .modal-enlace:hover {
     background: var(--superficie-alta);
     border-color: var(--tema-acento);
-}
-
-/* Tipo de recurso: solo se pinta cuando NO es un libro, para que la lista
-   distinga de un vistazo una documentación o un curso sin repetir "Libro"
-   en las tres cuartas partes de las filas. */
-.book-tipo {
-    padding: 0.05rem 0.35rem;
-    border-radius: 3px;
-    background: var(--superficie-suave);
-    font-size: 0.62rem;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-}
-
-/* En la lista manda el título: año y páginas se van para dejarle el ancho */
-.books-grid.view-list .book-year,
-.books-grid.view-list .book-pages { display: none; }
-
-/* Encabezados de subtema compactos en vista lista */
-.books-grid.view-list .subtema-titulo {
-    margin-bottom: var(--esp-xs);
-    padding-bottom: 0.2rem;
-    font-size: 0.9rem;
-}
-
-.books-grid.view-list.agrupado { gap: var(--esp-lg); }
-
-/* ----------------------------------------
-   Vista lista: la fila entera se tiñe del color de estado
-   ----------------------------------------
-   Sustituye a la marca lateral, que obligaba a mirar un detalle de 3px para
-   saber en qué estado está cada entrada. Con la fila teñida el estado se lee
-   recorriendo la lista con la vista, sin fijarse en nada.
-
-   Se usa un tinte, no el color pleno: un relleno saturado dejaría el texto
-   ilegible. Sobre papel bastan alfas mucho más bajas que sobre el fondo
-   oscuro anterior (allí eran 0.28/0.42), porque aquí el tinte OSCURECE la
-   fila en vez de aclararla. A 0.24 el peor contraste del texto —tinta sobre
-   leído o sobre pendiente, compuestos sobre --plano— es 11.7:1, muy por
-   encima del 4.5:1 que pide WCAG.
-
-   Los tripletes son los mismos hex de :root descompuestos en RGB, porque
-   rgba() necesita canales sueltos para variar la opacidad. Si cambian los
-   colores de estado, hay que cambiarlos también aquí.
-
-   El color va en una variable por estado para no pelearme por especificidad
-   con la regla de :hover, que tiene el mismo peso. */
-.books-grid.view-list .book-card {
-    --fila-tinte: 28, 24, 21;      /* tinta: respaldo si no hubiera estado */
-    background: rgba(var(--fila-tinte), 0.15);
-}
-
-.books-grid.view-list .book-card.estado-leido     { --fila-tinte: 0, 117, 81; }
-.books-grid.view-list .book-card.estado-leyendo   { --fila-tinte: 181, 124, 0; }
-.books-grid.view-list .book-card.estado-pendiente { --fila-tinte: 106, 79, 199; }
-
-.books-grid.view-list .book-card:hover {
-    background: rgba(var(--fila-tinte), 0.24);
-}
-
-/* La marca lateral sobra cuando toda la fila lleva el color */
-.books-grid.view-list .book-card::before { display: none; }
-
-/* Sin recuadro por fila, el separador estorba: el propio cambio de tinte
-   marca dónde acaba una y empieza la siguiente. Queda una separación mínima. */
-.books-grid.view-list .book-card {
-    border-bottom: none;
-    border-radius: var(--radio-sm);
-    margin-bottom: 2px;
-    padding-left: var(--esp-sm);
 }
