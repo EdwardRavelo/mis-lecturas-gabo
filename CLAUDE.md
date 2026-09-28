@@ -145,42 +145,94 @@ Day counts derive from state: `Leído` → `final - inicio`; `Leyendo` → `toda
 
 ## Design system and layout
 
-`css/styles.css` holds the tokens and layout; `css/animations.css` holds keyframes and a `prefers-reduced-motion` block; `css/estante.css` holds the shelf's chrome.
+**The identity comes from a Figma Make export that lives in `Figma/`**, kept as the design
+source of truth and git-ignored: it is a React/Vite/Tailwind scaffold, not app code. The thing
+that made it portable is that **it does not use Tailwind** — its 170 lines of `src/index.css`
+are hand-written CSS with semantic class names, and the component only applies them. So the
+design came across to the vanilla app without React, Vite or a build step, and the
+everything-is-a-global architecture above is untouched.
 
-The system is **"Biblioteca"**: dark walnut surfaces, warm off-white ink, brass accents and lamp light. Display type is **Instrument Serif**, data and UI **Plus Jakarta Sans**. It replaced *"Papel y tinta"* (raw paper, warm near-black ink, Fraunces + DM Sans) in the redesign of 2026-09-16. The reason is physical rather than fashionable: the centrepiece of the app is now a lit 3D bookcase, and a pale page around a dark scene fights itself. Identity does not hang off any one author — the accent colour is supplied per theme, injected by `aplicarColorTema()` as `--tema-acento` on `:root`.
+The export called itself *Marginalia*; the brand in use is **Diario de Lecturas**.
 
-**Every colour lives in the `:root` block**, and `js/estante3d.js` reads it from there via `token()` — so the palette reaches the WebGL scene on its own as long as that convention holds. Retheming is mostly rewriting that one block, but four places still carry a literal colour and a retheme has to sweep them:
+`css/styles.css` holds the tokens, the shell and the chrome; `css/animations.css` the keyframes
+and the `prefers-reduced-motion` block; `css/estante.css` the shelf.
 
-- `index.html` line 7 — the favicon is an inline SVG data URI with the palette baked in. Easiest one to forget, and it shows in the tab.
-- `index.html` `#tema-color` — the default accent offered when creating a theme.
-- `js/app.js` `abrirModalTema()` — the same default, applied when editing a theme with no colour.
-- `js/estante3d.js` — every `token()` call passes the current value as its fallback. Only fires if the token is missing, but stale values here silently outlive a retheme.
-- `css/styles.css` `.btn-primary:hover` / `.login-btn-github:hover` — were two raw `#000`; now tokens, but the pattern recurs.
+Type is **Playfair Display** for display and **DM Sans** for data. Surfaces are warm near-black
+(`#100F0D` / `#191815`), the accent is amber `#BF8550`.
 
-`:root` still carries an `-rgb` copy of each status colour (`--leido-rgb` and friends). Nothing uses them since the list view went, but they cost nothing and the next `rgba()` that needs a status colour will want them.
+**Every colour lives in the `:root` block**, and `js/estante3d.js` reads it from there via
+`token()`, so the palette reaches the WebGL scene on its own. Two places still carry a literal
+colour and a retheme has to sweep them: the favicon data URI at `index.html:7`, and the
+`token()` fallbacks in `estante3d.js`.
 
-**The three status colours (`--leido`, `--leyendo`, `--pendiente`) are validated** for contrast and colour-blindness with the `dataviz` skill's validator, `--pairs all` (the three coexist in the stacked status bar), against **both** surfaces they appear on, `#211A14` and `#17120E`:
+### The status colours are not the design's, and that matters
+
+The export shipped `#73b488` / `#d39a51` / `#8f82c8`. Through the `dataviz` validator
+(`--pairs all` — the three sit together in the filter bar) they failed four checks:
+
+- the green fell **below the chroma floor** — it renders as grey
+- green and amber sat at **ΔE 13.7 under normal vision**, below the hard floor of 15: even with
+  full colour vision they are hard to tell apart
+- ΔE 7.0 under protanopia, and two outside the lightness band
+
+They were re-stepped keeping the design's hues. What ships passes all five checks with no
+warnings against **both** surfaces they appear on (`#191815` and `#100F0D`):
 
 ```bash
-node <dataviz>/scripts/validate_palette.js "#2FA377,#BE831C,#8676E0" --mode dark --surface "#211A14" --pairs all
+node <dataviz>/scripts/validate_palette.js "#37A06A,#C07E24,#9184DC" --mode dark --surface "#191815" --pairs all
 ```
 
-Worst pair `#BE831C` ↔ `#2FA377`: ΔE 9.8 protanopia, 17.6 normal vision; all checks PASS. **Do not change those hex values without re-running the validator.**
+Worst pair `#C07E24` ↔ `#37A06A`: ΔE 8.1 protanopia, 17.7 normal vision. **Do not change them
+without re-running the validator.** This is the third palette in the project's history and the
+third time the check caught something; a designer's eye picks hues, not separations.
 
-That validation is **against a dark surface**, and the dark band is narrower than the light one (OKLCH L 0.48–0.67 versus 0.43–0.77). This palette was *rebuilt*, not converted: the previous one was validated on paper and every candidate that simply darkened it failed the lightness band. The lesson has now been paid for twice — when the surface changes, re-run the process and re-step the colours; never invert or nudge the old ones.
+### The shell
 
-The per-theme accent is user data and is **not** validated: a dark theme colour will read weakly against the walnut. Themes are editable from the UI, so the fix is to change the theme's colour, not to hardcode an override.
+```
+.library-layout  (flex column, 100dvh, never scrolls)
+  .topbar          brand · status filters with counts · search · Añadir libro · ···
+  .category-nav    Colecciones — filters by theme — N volúmenes visibles
+  .library-room    grid: shelf column + detail aside
+      .shelf-column   heading + .bookcase → the WebGL canvas
+      .book-detail    the selected reading
+```
 
-**The app is a 100dvh shell and the page never scrolls.** `body` is `overflow: hidden`; `.library-layout` is `height: 100dvh`. Only `#estante-raiz`, the menu panel and the modal bodies scroll. Consequences:
+Filters and search live in the top bar. They spent a while inside the `···` menu, which now
+keeps only what does not fit up there: adding, backup and session.
 
-- `.library-layout` must keep working as **flex** — `auth.js` sets `appLayout.style.display = 'flex'` inline when hiding the login screen, which would override a `display: grid`.
-- `.books-section` needs `min-height: 0`; without it a flex child refuses to shrink below its content and the whole shell overflows.
-- Padding lives on `#estante-raiz`, **not** on `.main-content` — a scrolling container would otherwise clip inside its own margin. This used to mean moving five blocks together at every breakpoint; with the sidebar and the grid gone there is only the one.
-- `.mobile-header` sits outside `.library-layout`, so under 768px the shell is `calc(100dvh - 48px)`. That 48px is fixed in CSS on purpose.
+**The aside summarises; the modal edits.** Clicking a spine fills `.book-detail` — cover, state,
+progress, your own comment as the pull quote — and **Ver notas y detalles** opens the existing
+`#edit-modal`, which stays the only place anything is written. That split is what keeps dates,
+comments, state changes and the link working without duplicating the form. The aside is never
+hidden: an empty column 310px wide reads as a bug, so with nothing selected it says what it is
+for.
 
-A hidden container measures 0, and a camera built against it comes out with a nonsensical aspect ratio. That is why `abrirEstante()` adds `.active` to the modal **before** mounting the scene. The analysis panel taught this lesson first, with Chart.js; the panel is gone but the rule outlived it.
+The `blockquote` in the aside is the reading's own `comentarios`. The design had a made-up
+literary quote there; inventing one under a real reading would be a small lie.
 
-Breakpoints: ≤1024px tighter shell padding and single-column modal, ≤768px the menu panel spans the width and modals dock to the bottom, ≤480px the filter grid and the progress strip stack. The shelf has its own cuts in `css/estante.css`.
+### The cabinet's frame is 3D, and it has to be
+
+The export draws the bookcase frame — sides, cornice, feet — in CSS around the shelves.
+Ported literally, that frame would sit still while the WebGL cabinet rotates inside it, which
+reads as broken the moment you turn it. So `construirCarcasa()` builds it as geometry, **inside
+the `mueble` group**: it turns with the furniture and it counts toward the bounding box that
+`encuadrarEscena()` and the pan limits measure — which is right, because the frame *is* the
+furniture.
+
+It also fixes the reason the orbit was capped at ±30°: the cabinet was planks and a back panel
+with no sides, top or bottom, so past that angle you saw it was a façade. With a carcass that
+limit could be loosened.
+
+**The app is a 100dvh shell and the page never scrolls.** Only `.bookcase`, the menu panel, the
+aside and the modal bodies scroll. `.library-room` needs `min-height: 0`, and so does
+`.bookcase`: without it a flex child refuses to shrink below its content and the whole shell
+overflows.
+
+`.library-layout` must keep working as **flex** — `auth.js` sets `appLayout.style.display =
+'flex'` inline when hiding the login, which would override a `display: grid`.
+
+Breakpoints: ≤1020px the top bar wraps and the aside narrows; ≤760px the room stacks and the
+aside docks to the bottom of the screen.
 
 ## The 3D shelf
 
@@ -207,17 +259,20 @@ The signature component, and since the cut of 2026-09-26 the **only** view: no c
 
 6. **`estanteDisponible` is the kill switch**, false when `THREE` is missing or the browser gives no WebGL context. `montarMuro()` / `montarEstanteModal()` then return false and `app.js` paints `crearEstantePlano()` instead — the same spines, flat, fully usable. The availability rules in this file are technical, not aesthetic: the redesign lifted the visual invariants, not the rule that the app survives a dead CDN.
 
-### Navigating it: drag to move, wheel to zoom at the cursor, middle-drag to turn
+### Navigating it: wheel to zoom at the cursor, middle-drag to turn
 
 Both scenes take `OrbitControls` through `crearControles()`, with the same limits so the
 furniture behaves the same in the wall and in the modal: ±30° of azimuth, ±20° around the
-horizontal, and 0.22×–1.6× the fitted distance. The near limit is what lets you get close
+horizontal, and 0.22×–1.25× the fitted distance. The near limit is what lets you get close
 enough to read one shelf's spines; it was 0.55× and that only ever framed the whole cabinet.
+The far limit was 1.6×, which let the cabinet shrink until the edge of the room showed.
 
-**Buttons are mapped like a map, not like a 3D viewer**: left drag pans, middle drag (the
-wheel pressed) rotates, wheel zooms. Navigating is what you do constantly, so it gets the
-primary gesture; turning is the gesture for *looking at* the thing. The right button is left
-unbound on purpose. One finger pans and two fingers dolly-rotate.
+**There is no free pan, and that is the point.** `enablePan` is false and the left button is
+unbound: dragging the furniture anywhere you liked felt chaotic — you ended up somewhere with
+no idea where. What replaced it is the parallax in `montarMuro()`, which follows the cursor a
+few degrees and returns to centre on its own. You still reach any shelf: the wheel zooms to
+the cursor and the collections nav filters. Middle drag (the wheel pressed) rotates; the right
+button is unbound on purpose. One finger rotates, two fingers dolly-rotate.
 
 The middle button needs one guard: pressing it triggers Chrome's autoscroll — the four-arrow
 widget — which swallows the drag. `OrbitControls` does not stop it, because it never calls
@@ -232,6 +287,21 @@ to the shelf you wanted. r147 has no `zoomToCursor` — it landed in a later rel
 the ray hits, or a plane through the target when the cursor is over empty space) and scales
 camera *and* target toward it by the same factor: the point stays pinned on screen while the
 distance drops, which is what "zoom there" means.
+
+**Zooming out is not the same gesture reversed — it recentres.** Anchoring the zoom out to the
+cursor too *amplifies* the target's offset from centre, so pulling back left the cabinet drifting
+further off-frame the further you went. So the wheel handler splits the two directions: zoom in
+goes to the cursor, zoom out is a plain dolly (the camera retreats, the target does not move)
+plus a pull of the target back toward the furniture's centre — the same point
+`encuadrarEscena()` and `crearControles()` start from, so arriving there is literally the
+opening framing.
+
+The pull factor is what remains of the zoom travel after the notch over what remained before it,
+`(tope − nueva) / (tope − distancia)`. Chained over several notches the product telescopes to
+`(tope − distancia) / (tope − distancia inicial)`, i.e. the offset fades **linearly in distance**:
+no jerk at any notch, and exactly zero at the far stop. Measured from a hard zoom into a corner
+(offset 68.9 at 0.22×): 52.3 at 0.47×, 26.4 at 0.86×, 0 at 1.25×. The corollary is that a
+*partial* zoom out only partially recentres, which is intended — it tracks how far out you went.
 
 That listener sits on the container in the **capture** phase and calls `stopPropagation()`,
 so the control's own wheel handler on the canvas never sees the event. Its `enableZoom` stays
@@ -248,9 +318,10 @@ recompute. A turntable would rebuild a 2048² shadow map every frame of the gest
 case that *does* move something is a book's hover tween, and the animation loop asks for a
 shadow update only on those frames.
 
-The limits are not timidity. The furniture is planks plus one thin back panel per shelf — no
-sides, no top, no bottom. Past roughly 30° you start seeing that there is no cabinet there.
-Widening the angle means building a carcass first.
+The ±30° cap was not timidity: the furniture used to be planks plus one thin back panel per
+shelf, and past that angle you saw there was no cabinet there. `construirCarcasa()` since built
+the sides, cornice and feet (see "The cabinet's frame is 3D"), so the reason is gone and the cap
+is now just a choice — it can be widened.
 
 **Four things this breaks if you touch it carelessly:**
 
@@ -313,12 +384,12 @@ themselves: it is the shadow, and the sense that the cabinet is somewhere. An ob
 nothing behind or beneath it does not look like it is anywhere; it looks cut out.
 
 **The wall spans far more than the furniture** — fourteen times its width. The demanding case
-is not the opening frame but the worst one: the camera at its furthest (1.6× the fitted
-distance, around 400 units) *and* turned to the ±30° stop. There the camera slides some
-400·sin(30°) ≈ 200 sideways and still sees about 140 further that way, so the farthest visible
-point lands roughly 340 from centre. At seven times the cabinet's width the wall reached 260
-and black showed at the edge. A plane is two triangles, so overshooting costs nothing and
-falling short is obvious on sight.
+is not the opening frame but the worst one: the camera at its furthest (1.25× the fitted
+distance, around 345 units) *and* turned to the ±30° stop. There the camera slides some
+345·sin(30°) ≈ 172 sideways and still sees well past that, so the farthest visible point lands
+some 300 from centre. At seven times the cabinet's width the wall reached 260 and black showed
+at the edge. A plane is two triangles, so overshooting costs nothing and falling short is
+obvious on sight — keep the margin even though the far limit came down from 1.6×.
 
 It was briefly built as a niche instead — five faces boxing the cabinet in, pointing inward on
 `FrontSide` so the near wall culled away as you turned. It worked, but it framed the furniture
@@ -415,7 +486,7 @@ Opening the largest theme costs about 50 ms and closing about 60 ms.
 
 A `<canvas>` is opaque to the keyboard, to screen readers and to Ctrl+F, and the theme and subtema names are **painted into textures**, so they do not exist as text anywhere else. `crearEspejoEstante()` renders the whole piece of furniture as real DOM — a visually-hidden but focusable list of buttons in the same order. Tab walks the books, focus pulls out the matching 3D book (`enfocarLibroEnMuro` / `enfocarLibroEnModal`), Enter opens the detail. It is clipped with `clip-path`, never `display: none`, which would take it out of the tab order — the whole point.
 
-The status colours are the only signal on a wall spine, so the DOM legend above the canvas always carries **name and count**, never colour alone.
+The status colours are the only signal on a wall spine, so the counts live in the top bar's filter pills, each carrying **name and number** next to its dot — never colour alone. That legend used to sit above the canvas; the bar replaced it.
 
 Wall spines also carry no text — at 16px wide none would be legible, and it would mean 112 textures to say nothing. What a book *is* comes from `mostrarPista()`, a DOM tooltip fed by the same raycast that drives the hover. It is positioned with `transform`, not `top`/`left`, so the browser does not re-layout on every mouse move, and it flips to the other side of the cursor near a window edge.
 
@@ -455,7 +526,7 @@ All user-supplied text goes through `escaparHtml()` before being interpolated in
 
 ### The `···` menu
 
-Everything that used to be the left sidebar lives in one popover: search, the status filter, *Nuevo tema* / *Una lectura* / *Varias lecturas*, export/import, and the user plus logout. The sidebar itself — theme list, five stat counters, filter row, the stacked status bar, the backup block — was deleted in the cut of 2026-09-26, because the wall already says most of it: the shelves **are** the theme list, each with its own count, and the legend above the canvas carries the three status totals.
+What does not fit in the top bar: *Nuevo tema*, *Varias lecturas*, export/import, and the user plus logout. Search, the status filters and *Añadir libro* moved up to the bar with the Figma design; the menu kept the rest. The sidebar itself — theme list, five stat counters, filter row, the stacked status bar, the backup block — was deleted in the cut of 2026-09-26, because the wall already says most of it: the shelves **are** the theme list, each with its own count, and the legend above the canvas carries the three status totals.
 
 Two things that are easy to get wrong here:
 

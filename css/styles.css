@@ -1,118 +1,124 @@
 /* ========================================
    Diario de Lecturas — Sistema de diseño
    ========================================
-   "Biblioteca": nogal oscuro, latón y luz de lámpara. Una habitación con
-   libros, no una hoja de papel. Sustituye a "Papel y tinta" (papel crudo +
-   Fraunces/DM Sans), jubilado en el rediseño del 2026-09-16.
+   La identidad viene del diseño de Figma que hay en `Figma/` (export de Figma
+   Make). De ahí salen la tipografía, los fondos, el ámbar y las maderas. Lo
+   que NO se copió de allí son los tres colores de estado: ver abajo.
 
-   El motivo del cambio es físico: la pieza central de la app es un mueble 3D
-   iluminado, y una página clara alrededor de una escena oscura se pelea
-   consigo misma. La luz de la escena y la de la interfaz son la misma.
+   El export se llamaba "Marginalia"; la marca que se usa es "Diario de
+   Lecturas". El export se queda como referencia de diseño, ignorado por git:
+   no es código de la app.
 
-   Todo color vive aquí. js/charts.js y js/estante3d.js lo leen con token()
-   desde :root, así que la paleta llega sola a las gráficas y al WebGL.
+   Todo color vive aquí. js/estante3d.js lo lee con token() desde :root, así
+   que la paleta llega sola al WebGL y retematizar es reescribir este bloque.
 
-   Los tres colores de estado están VALIDADOS con el validador de la skill
-   dataviz, --pairs all (los tres conviven en la barra apilada), contra las
-   DOS superficies sobre las que aparecen, #211A14 y #17120E:
-     peor par  #BE831C ↔ #2FA377  ΔE 9.8 protanopía · 17.6 visión normal
-     los tres  dentro de la banda L 0.48–0.67, sobre el suelo de croma, ≥3:1
-   Todos los checks en PASS.
+   ----------------------------------------
+   LOS COLORES DE ESTADO, Y POR QUÉ NO SON LOS DEL DISEÑO
+   ----------------------------------------
+   El diseño traía #73b488 / #d39a51 / #8f82c8. Pasados por el validador de la
+   skill dataviz (--pairs all, los tres conviven en la barra de filtros)
+   fallaban cuatro comprobaciones:
 
-   OJO: esta validación es contra fondo OSCURO. La paleta anterior se validó
-   sobre papel (#FBF7F0) y NO se reutilizó al venir aquí: se rehízo desde
-   cero. Si algún día se vuelve a fondo claro, repetir el proceso — nunca
-   invertir ni aclarar estos valores a ojo.
+     · el verde caía por debajo del suelo de croma — se leía gris
+     · verde y ámbar quedaban a ΔE 13.7 en VISIÓN NORMAL, bajo el suelo de 15:
+       ni con visión plena se distinguen con soltura
+     · ΔE 7.0 en protanopía, y dos fuera de la banda de luminosidad
+
+   Se re-escalonaron conservando sus tonos. Los de abajo pasan los cinco
+   checks, sin advertencias, contra las DOS superficies donde aparecen
+   (#191815 y #100f0d):
+
+     peor par  #C07E24 ↔ #37A06A  ΔE 8.1 protanopía · 17.7 visión normal
+
+   No tocar sin volver a pasar el validador. Es la tercera vez que se paga
+   este peaje en el proyecto.
    ======================================== */
 
 :root {
-    /* Superficies — nogal */
-    --plano: #17120E;             /* fondo de página */
-    --superficie: #211A14;        /* tarjetas, panel, modal */
-    --superficie-alta: #2C231B;   /* hover, elementos elevados */
-    --superficie-honda: #100C09;  /* huecos, interior del mueble */
-    --superficie-suave: rgba(244, 237, 227, 0.05);
+    /* Superficies */
+    --plano: #100F0D;             /* fondo de página */
+    --superficie: #191815;        /* paneles, ficha, modal */
+    --superficie-alta: #201E1A;   /* hover, elementos elevados */
+    --superficie-honda: #0D0D0C;  /* huecos, interior del mueble */
+    --superficie-suave: rgba(233, 228, 219, 0.05);
 
-    /* Tinta sobre madera */
-    --tinta: #F4EDE3;             /* texto principal, blanco cálido */
-    --tinta-suave: #C3B4A2;       /* secundario */
-    --tinta-tenue: #8C7C68;       /* ejes, etiquetas menores */
+    /* Tinta */
+    --tinta: #E9E4DB;             /* texto principal, crema */
+    --tinta-suave: #928C81;       /* secundario */
+    --tinta-tenue: #69665F;       /* ejes, etiquetas menores */
 
     /* Líneas: nunca un gris de 1px; siempre luz a muy baja opacidad */
-    --borde: rgba(244, 237, 227, 0.10);
-    --borde-fuerte: rgba(244, 237, 227, 0.22);
-    --rejilla: rgba(244, 237, 227, 0.07);
+    --borde: rgba(236, 226, 208, 0.11);
+    --borde-fuerte: rgba(236, 226, 208, 0.24);
+    --rejilla: rgba(236, 226, 208, 0.07);
 
-    /* Estados de lectura — validados, no tocar sin revalidar */
-    --leido: #2FA377;
-    --leyendo: #BE831C;
-    --pendiente: #8676E0;
+    /* Estados de lectura — VALIDADOS, no tocar sin revalidar */
+    --leido: #37A06A;
+    --leyendo: #C07E24;
+    --pendiente: #9184DC;
 
     /* Los mismos en RGB, para tintes con alfa variable */
-    --leido-rgb: 47, 163, 119;
-    --leyendo-rgb: 190, 131, 28;
-    --pendiente-rgb: 134, 118, 224;
+    --leido-rgb: 55, 160, 106;
+    --leyendo-rgb: 192, 126, 36;
+    --pendiente-rgb: 145, 132, 220;
 
-    /* Fondos tenues de los mismos estados, para chips y etiquetas */
-    --leido-wash: rgba(47, 163, 119, 0.14);
-    --leyendo-wash: rgba(190, 131, 28, 0.16);
-    --pendiente-wash: rgba(134, 118, 224, 0.14);
+    --leido-wash: rgba(55, 160, 106, 0.14);
+    --leyendo-wash: rgba(192, 126, 36, 0.16);
+    --pendiente-wash: rgba(145, 132, 220, 0.14);
 
-    /* Latón: el acento de la casa cuando ningún tema manda.
-       app.js sobrescribe --tema-acento con el color del tema activo. */
-    --laton: #C9A227;
-    --tema-acento: #C9A227;
+    /* Ámbar de la casa. app.js sobrescribe --tema-acento con el color del
+       tema activo; este es el valor cuando ninguno manda. */
+    --laton: #BF8550;
+    --tema-acento: #BF8550;
+    --ambar-claro: #D7A36D;
+    --ambar-hondo: #B97945;
 
-    /* La habitación donde está el mueble: pared de fondo y suelo. Azul
-       petróleo muy oscuro, a propósito: contra el nogal cálido y el latón
-       hace contraste de temperatura, que es lo que saca a una escena oscura
-       de lo turbio. Con todo del mismo lado del espectro, el 3D se veía
-       monocromo. */
-    --pared: #0F1A1E;
-    --suelo: #0A1114;
+    /* Maderas del mueble, tomadas del marco del diseño. Las lee estante3d.js
+       con token(), así que el 3D no repite un hex. */
+    --madera-clara: #6E492E;
+    --madera: #4E301E;
+    --madera-honda: #251710;
+    --madera-canto: #39271B;
 
-    /* Maderas del mueble. Las lee estante3d.js con token(), de modo que el
-       3D no repite un hex y cambia con la paleta. */
-    --madera-clara: #7A5335;
-    --madera: #4A3120;
-    --madera-honda: #2A1C12;
+    /* La habitación: pared de fondo y suelo */
+    --pared: #13120F;
+    --suelo: #0B0B0A;
 
-    /* Alto del banner offline: lo usa body.con-banner para apartar el shell */
-    --alto-banner: 48px;
+    --peligro: #D08070;
+    --peligro-wash: rgba(208, 128, 112, 0.12);
 
-    --peligro: #E0685E;
-    --peligro-wash: rgba(224, 104, 94, 0.12);
+    --velo: rgba(8, 7, 6, 0.72);
 
-    /* Velo de modales y del cajón lateral en móvil */
-    --velo: rgba(10, 7, 5, 0.72);
+    /* Tipografía del diseño: serif editorial para los momentos grandes,
+       grotesca para todo lo que sea dato. */
+    --fuente-titulo: 'Playfair Display', Georgia, serif;
+    --fuente-texto: 'DM Sans', system-ui, -apple-system, sans-serif;
 
-    /* Tipografía: serif de display de alto contraste para los momentos
-       grandes, grotesca geométrica para todo lo que sea dato. */
-    --fuente-titulo: 'Instrument Serif', 'Fraunces', Georgia, serif;
-    --fuente-texto: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-
-    /* Más aire que en la versión de papel: la pantalla respira */
     --esp-xs: 0.375rem;
     --esp-sm: 0.625rem;
     --esp-md: 1rem;
     --esp-lg: 1.75rem;
     --esp-xl: 3rem;
 
-    /* Radios mayores: sobre madera oscura una esquina viva se ve barata */
     --radio-sm: 6px;
     --radio-md: 12px;
     --radio-lg: 20px;
 
-    /* Sombras cálidas y difusas, nunca negro puro, más un filo de luz
-       interior que es lo que hace que un panel parezca una pieza física. */
-    --sombra: 0 24px 60px rgba(8, 5, 3, 0.55);
-    --sombra-baja: 0 2px 12px rgba(8, 5, 3, 0.40);
-    --luz-filo: inset 0 1px 0 rgba(244, 237, 227, 0.08);
+    --sombra: 0 24px 60px rgba(0, 0, 0, 0.52);
+    --sombra-baja: 0 2px 12px rgba(0, 0, 0, 0.4);
+    --luz-filo: inset 0 1px 0 rgba(233, 228, 219, 0.08);
 
     /* Curva propia, con masa. Nada de linear ni ease-in-out. */
     --transicion: 0.28s cubic-bezier(0.32, 0.72, 0, 1);
     --transicion-lenta: 0.6s cubic-bezier(0.32, 0.72, 0, 1);
 
+    /* Alto del banner offline: lo usa body.con-banner para apartar el shell */
+    --alto-banner: 48px;
+
+    /* Alturas del chrome nuevo, que el shell necesita para repartirse */
+    --alto-topbar: 80px;
+    --alto-nav: 54px;
+    --ancho-ficha: 310px;
 }
 
 /* ========================================
@@ -162,41 +168,343 @@ img { max-width: 100%; display: block; }
 }
 
 /* ========================================
-   Layout: el mueble y nada más
+   Layout: barra, colecciones y sala
    ========================================
-   La ventana entera es la estantería. No hay barra lateral, ni rejilla de
-   tarjetas, ni panel de análisis: todo eso se retiró en el recorte del
-   2026-09-26, porque repetía en widgets lo que el mueble ya dice solo.
-
-   Lo único fijo sobre la escena son el botón "···" y la leyenda de estados.
+   Portado de Figma/src/index.css. Los valores concretos —alturas, gaps,
+   clamps— son del diseño; los colores se pasaron a tokens de :root para que
+   el 3D pueda leerlos con token() y retematizar siga siendo un solo bloque.
 
    OJO: .library-layout tiene que seguir funcionando como flex — auth.js le
    asigna `style.display = 'flex'` al ocultar el login, lo que pisaría
    cualquier `display: grid` que se pusiera aquí. */
 .library-layout {
     display: flex;
+    flex-direction: column;
     height: 100dvh;
     overflow: hidden;
-    position: relative;   /* ancla del menú flotante */
+    position: relative;
+    background:
+        radial-gradient(circle at 58% 5%, rgba(180, 119, 61, 0.08), transparent 30%),
+        linear-gradient(135deg, #13120F, var(--plano) 72%);
 }
 
-.main-content {
-    flex: 1;
-    min-width: 0;
+/* ----------------------------------------
+   Barra superior
+   ---------------------------------------- */
+
+.topbar {
+    flex: 0 0 auto;
+    min-height: var(--alto-topbar);
+    padding: 14px clamp(20px, 3vw, 48px);
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+    border-bottom: 1px solid var(--borde);
+    background: rgba(16, 15, 13, 0.86);
+    /* backdrop-filter solo en elementos que no scrollean: esta barra es fija */
+    backdrop-filter: blur(16px);
+    position: relative;
+    z-index: 10;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; min-width: 222px; }
+
+.brand-mark {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    color: #17130E;
+    font: 600 22px/1 var(--fuente-titulo);
+    background: linear-gradient(145deg, var(--ambar-claro), #9C6337);
+    /* Radio asimétrico: un círculo exacto se lee como logotipo de plantilla */
+    border-radius: 50% 50% 46% 54%;
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.35), 0 8px 22px rgba(0, 0, 0, 0.3);
+}
+
+.brand-name { margin: 0; font: 600 20px/1.1 var(--fuente-titulo); }
+
+.status-filters { display: flex; align-items: center; gap: 4px; margin-right: auto; }
+
+.status-pill {
+    padding: 9px 12px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--tinta-suave);
+    font-size: 13px;
+    transition: background var(--transicion), color var(--transicion);
+}
+
+.status-pill:hover, .status-pill.active { background: #292720; color: var(--tinta); }
+.status-pill strong { color: var(--tinta); font-size: 12px; }
+
+.status-dot { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 10px currentColor; }
+.status-dot.read    { color: var(--leido); background: currentColor; }
+.status-dot.reading { color: var(--leyendo); background: currentColor; }
+.status-dot.pending { color: var(--pendiente); background: currentColor; }
+
+.top-actions { display: flex; align-items: center; gap: 8px; }
+
+.icon-button {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 50%;
+    background: #27251F;
+    color: inherit;
+    transition: background var(--transicion);
+}
+
+.icon-button:hover { background: #343128; }
+.icon-button.quiet { background: transparent; color: var(--tinta-suave); }
+.icon-button.quiet:hover { background: #27251F; color: var(--tinta); }
+
+.topbar svg, .category-nav svg, .book-detail svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.add-button {
+    min-height: 40px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 999px;
+    color: #1A140F;
+    background: linear-gradient(135deg, var(--ambar-claro), var(--ambar-hondo));
+    font-size: 13px;
+    font-weight: 700;
+    box-shadow: 0 8px 24px rgba(126, 76, 37, 0.2);
+    transition: filter var(--transicion), transform var(--transicion);
+}
+
+.add-button:hover:not(:disabled) { filter: brightness(1.08); }
+.add-button:active:not(:disabled) { transform: scale(0.97); }
+.add-button:disabled { opacity: 0.38; cursor: not-allowed; }
+
+/* El buscador se despliega: en reposo es solo la lupa */
+.search-box {
+    display: flex;
+    align-items: center;
+    border-radius: 999px;
+    transition: background var(--transicion), padding var(--transicion);
+}
+
+.search-box.open { padding-left: 14px; background: #27251F; }
+.search-box input { width: 0; padding: 0; border: 0; outline: 0; background: transparent;
+                    color: var(--tinta); font-size: 12px; transition: width var(--transicion); }
+.search-box.open input { width: 190px; }
+.search-box input::placeholder { color: var(--tinta-suave); }
+
+/* ----------------------------------------
+   Colecciones
+   ---------------------------------------- */
+
+.category-nav {
+    flex: 0 0 auto;
+    min-height: var(--alto-nav);
+    padding: 0 clamp(20px, 3vw, 48px);
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    border-bottom: 1px solid var(--borde);
+    background: #141310;
+}
+
+.nav-intro { display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
+             color: #C1B9AD; font-size: 12px; font-weight: 600; }
+.nav-intro svg { width: 15px; height: 15px; }
+
+.category-list {
+    display: flex;
+    align-items: stretch;
+    gap: 24px;
+    height: var(--alto-nav);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.category-list::-webkit-scrollbar { display: none; }
+
+.category-list button {
+    padding: 0;
+    border: 0;
+    border-bottom: 1px solid transparent;
+    background: transparent;
+    color: #77736B;
+    white-space: nowrap;
+    font-size: 12px;
+    transition: color var(--transicion), border-color var(--transicion);
+}
+
+.category-list button:hover,
+.category-list button.active { color: var(--tinta); border-bottom-color: #B97E4C; }
+
+.category-nav > p { margin: 0 0 0 auto; flex: 0 0 auto; white-space: nowrap;
+                    color: var(--tinta-tenue); font-size: 11px; }
+
+/* ----------------------------------------
+   La sala
+   ---------------------------------------- */
+
+.library-room {
+    flex: 1 1 auto;
+    /* min-height: 0 o el hijo flex se niega a encoger y desborda el shell */
+    min-height: 0;
+    padding: 44px clamp(20px, 5vw, 88px) 44px;
+    display: grid;
+    grid-template-columns: minmax(420px, 1fr) var(--ancho-ficha);
+    gap: clamp(28px, 5vw, 80px);
+    position: relative;
     overflow: hidden;
 }
 
-/* El contenedor del mueble. Necesita min-height:0 por lo de siempre: sin él
-   un hijo flex se niega a encoger por debajo de su contenido y desbordaría
-   el shell entero. */
-#estante-raiz {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding: var(--esp-lg);
+.ambient-light {
+    position: absolute;
+    inset: -20% 10% auto;
+    height: 70%;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center top, rgba(194, 143, 92, 0.09), transparent 65%);
 }
+
+.shelf-column {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 1;
+}
+
+/* ----------------------------------------
+   Ficha lateral
+   ---------------------------------------- */
+
+.book-detail {
+    align-self: start;
+    padding: 28px;
+    position: relative;
+    z-index: 2;
+    max-height: 100%;
+    overflow-y: auto;
+    border: 1px solid var(--borde);
+    border-radius: var(--radio-lg);
+    background: rgba(28, 27, 23, 0.78);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(18px);
+}
+
+.detail-close {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    border: 0;
+    border-radius: 50%;
+    color: var(--tinta-suave);
+    background: #292721;
+}
+.detail-close:hover { color: var(--tinta); background: #343128; }
+.detail-close svg { width: 14px; height: 14px; }
+
+/* La tapa: no es una portada real —no hay— sino una compuesta con el título,
+   que es lo que el diseño propone y evita el hueco gris de antes. */
+.cover {
+    width: 154px;
+    aspect-ratio: 0.68;
+    margin: 24px auto 27px;
+    padding: 18px 16px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    color: #F2ECE1;
+    background: linear-gradient(90deg, var(--tema-acento), color-mix(in srgb, var(--tema-acento) 70%, #ffffff) 38%, color-mix(in srgb, var(--tema-acento) 62%, #000000));
+    border-radius: 2px 6px 6px 2px;
+    box-shadow: inset 4px 0 rgba(255, 255, 255, 0.12),
+                inset -5px 0 rgba(0, 0, 0, 0.15),
+                12px 16px 22px rgba(0, 0, 0, 0.45);
+    transform: perspective(600px) rotateY(-7deg);
+}
+
+.cover::after {
+    content: '';
+    position: absolute;
+    top: 7px;
+    bottom: 7px;
+    left: 6px;
+    border-left: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.cover-rule { width: 28px; height: 2px; margin: 16px 0 25px; background: #D8BB89; }
+.cover small { text-transform: uppercase; letter-spacing: 0.12em; font-size: 6px; }
+.cover strong { font: 600 18px/1.06 var(--fuente-titulo); overflow: hidden; }
+.cover > span:not(.cover-rule) { margin-top: 8px; font-size: 7px; opacity: 0.75; }
+.cover i { margin-top: auto; font: italic 7px var(--fuente-titulo); }
+
+.detail-copy h2 { margin: 12px 0 3px; font: 600 22px/1.15 var(--fuente-titulo); }
+.detail-copy .author { margin: 0 0 22px; color: var(--tinta-suave); font-size: 12px; }
+
+.state-badge {
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: #302E28;
+    color: #C7BFB3;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.state-badge.leido     { color: var(--leido); background: var(--leido-wash); }
+.state-badge.leyendo   { color: var(--leyendo); background: var(--leyendo-wash); }
+.state-badge.pendiente { color: var(--pendiente); background: var(--pendiente-wash); }
+
+.progress-copy { display: flex; justify-content: space-between; color: var(--tinta-suave); font-size: 10px; }
+.progress-copy strong { color: #C8C1B7; }
+
+.progress-track { height: 3px; margin-top: 8px; overflow: hidden; border-radius: 999px; background: #35332D; }
+.progress-track span { height: 100%; display: block; border-radius: inherit;
+                       background: linear-gradient(90deg, #A66A3D, #DDA76A); }
+
+.book-detail blockquote {
+    margin: 20px 0;
+    padding-left: 14px;
+    border-left: 1px solid #704D31;
+    color: var(--tinta-suave);
+    font: italic 12px/1.55 var(--fuente-titulo);
+}
+
+.detail-action {
+    width: 100%;
+    padding: 12px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 0;
+    border-top: 1px solid var(--borde);
+    background: transparent;
+    color: #D6CFC4;
+    font-size: 11px;
+    font-weight: 700;
+    transition: color var(--transicion);
+}
+.detail-action:hover { color: var(--tinta); }
+.detail-action svg { width: 15px; height: 15px; }
 
 /* ========================================
    Menú "···"
@@ -955,7 +1263,35 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 
 .login-screen.active { display: flex; }
 
+/* El mueble detrás de la tarjeta: lo primero que ves es el producto, no una
+   tarjeta sobre negro. Desenfocado y con un velo para que el texto mande.
+
+   El blur va sobre un elemento fijo y estático, no sobre nada que scrollee:
+   la escena se dibuja una vez y se queda quieta, así que no hay repintados. */
+.login-fondo {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    filter: blur(7px) saturate(0.85);
+    opacity: 0.5;
+}
+
+/* Velo entre el mueble y la tarjeta: sin él, el texto compite con los lomos */
+.login-screen::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(60% 55% at 50% 50%,
+                rgba(10, 7, 5, 0.86) 0%, rgba(10, 7, 5, 0.55) 100%);
+}
+
 .login-card {
+    position: relative;
+    z-index: 1;
     width: 100%;
     max-width: 380px;
     padding: var(--esp-xl);
@@ -965,7 +1301,6 @@ textarea.form-input { resize: vertical; min-height: 80px; }
     text-align: center;
 }
 
-.login-decoration { font-size: 1.3rem; color: var(--tema-acento); opacity: 0.6; }
 
 .login-title {
     margin-top: var(--esp-md);
@@ -1009,7 +1344,6 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 .login-btn-github { background: var(--tinta); border-color: var(--tinta); color: var(--plano); }
 .login-btn-github:hover { background: var(--superficie-alta); }
 
-.login-btn-google:hover { background: var(--superficie-alta); color: var(--tinta); }
 
 .login-btn-offline { border-color: transparent; color: var(--tinta-tenue); }
 .login-btn-offline:hover { color: var(--tinta-suave); }
@@ -1157,4 +1491,14 @@ body.con-banner .library-layout {
 .modal-enlace:hover {
     background: var(--superficie-alta);
     border-color: var(--tema-acento);
+}
+
+/* Estado vacío de la ficha: la columna se reserva siempre, así que tiene que
+   decir para qué sirve en vez de quedarse en blanco. */
+.detail-vacio {
+    margin: 0;
+    padding: var(--esp-lg) var(--esp-sm);
+    color: var(--tinta-tenue);
+    font: italic 13px/1.6 var(--fuente-titulo);
+    text-align: center;
 }

@@ -1,5 +1,5 @@
 // ========================================
-// Autenticación con Supabase (solo Google)
+// Autenticación con Supabase (solo GitHub)
 // Mis Lecturas Gabo
 // ========================================
 
@@ -70,9 +70,10 @@ async function inicializarAuth() {
 // ----------------------------------------
 // Login con OAuth
 // ----------------------------------------
-// GitHub es hoy el único proveedor habilitado en el proyecto Supabase.
-// Google está en la interfaz pero dará "provider is not enabled" hasta
-// que se den de alta sus credenciales en Authentication → Providers.
+// GitHub es el único proveedor habilitado en el proyecto Supabase. Hubo un
+// botón de Google en la interfaz, pero el proveedor nunca se dio de alta y
+// devolvía validation_failed, así que se retiró. Ver CLAUDE.md si alguna
+// vez se añade: los datos cuelgan del user_id que creó GitHub.
 
 async function loginConGitHub() {
     if (!supabaseConfigurado) {
@@ -89,24 +90,6 @@ async function loginConGitHub() {
     if (error) {
         console.error('Error al iniciar sesión con GitHub:', error.message);
         mostrarErrorAuth('No se pudo conectar con GitHub. Puedes entrar sin conexión.');
-    }
-}
-
-async function loginConGoogle() {
-    if (!supabaseConfigurado) {
-        mostrarErrorAuth('La nube no está disponible. Usa "Entrar sin conexión".');
-        return;
-    }
-
-    const { error } = await supabaseClient.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-            redirectTo: window.location.origin + window.location.pathname
-        }
-    });
-    if (error) {
-        console.error('Error al iniciar sesión con Google:', error.message);
-        mostrarErrorAuth('No se pudo conectar con Google. Puedes entrar sin conexión.');
     }
 }
 
@@ -190,6 +173,9 @@ function mostrarPantallaLogin() {
     const appLayout = document.querySelector('.library-layout');
     if (loginScreen) loginScreen.classList.add('active');
     if (appLayout) appLayout.style.display = 'none';
+    // El mueble de fondo. Va después de mostrar la pantalla: un contenedor
+    // oculto mide 0 y la cámara saldría con un aspecto absurdo.
+    window.gaboApp?.montarFondoLogin?.();
 }
 
 function ocultarPantallaLogin() {
@@ -197,6 +183,11 @@ function ocultarPantallaLogin() {
     const appLayout = document.querySelector('.library-layout');
     if (loginScreen) loginScreen.classList.remove('active');
     if (appLayout) appLayout.style.display = 'flex';
+    // Se libera el fondo antes de que se monte el estante de verdad. En
+    // rigor renderizarLibros() ya lo haría, pero dejarlo explícito evita
+    // que el día de mañana alguien cambie ese orden y se encuentre con dos
+    // contextos WebGL vivos.
+    desmontarMuro();
 }
 
 function actualizarUIUsuario(usuario) {
@@ -247,12 +238,10 @@ function mostrarErrorAuth(mensaje) {
 
 document.addEventListener('DOMContentLoaded', () => {
     const btnGitHub = document.getElementById('btn-login-github');
-    const btnGoogle = document.getElementById('btn-login-google');
     const btnOffline = document.getElementById('btn-login-offline');
     const btnLogout = document.getElementById('btn-logout');
 
     if (btnGitHub) btnGitHub.addEventListener('click', loginConGitHub);
-    if (btnGoogle) btnGoogle.addEventListener('click', loginConGoogle);
     if (btnOffline) {
         btnOffline.addEventListener('click', () =>
             entrarModoOffline('Estás trabajando sin conexión. Los cambios se guardan en este navegador.')

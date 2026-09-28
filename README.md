@@ -4,8 +4,6 @@ Aplicación web para llevar un diario de lecturas organizado por temas: qué est
 
 Empezó como un catálogo fijo de las 18 obras de Gabriel García Márquez y hoy admite cualquier material de lectura o estudio —libros, cursos, documentación, vídeos, películas, artículos— agrupado en los temas que vos crees.
 
-![Gabriel García Márquez](images/gabo-header.jpg)
-
 ## Qué hace
 
 **Organización por temas y subtemas**
@@ -30,7 +28,7 @@ Empezó como un catálogo fijo de las 18 obras de Gabriel García Márquez y hoy
 - Todo lo demás —buscar, filtrar, añadir, exportar, cerrar sesión— vive en el menú «···»
 - Si el navegador no da WebGL o no carga la librería, cae a un estante plano con la misma información
 
-No hay barra lateral, ni rejilla de tarjetas, ni gráficas: se retiraron en septiembre de 2026 porque repetían en widgets lo que el propio mueble ya dice.
+El aspecto viene de un diseño hecho en Figma, que vive en `Figma/` como referencia y no se compila: de ahí salen la barra superior, las colecciones, la ficha lateral, la tipografía y el marco del mueble. Lo que no se copió son los tres colores de estado, que no pasaban el validador de contraste y daltonismo y hubo que re-escalonarlos.
 
 **Funciona aunque la nube no**
 El plan gratuito de Supabase pausa el proyecto tras una semana sin actividad. La app está construida para sobrevivir a eso: guarda una copia local en cada escritura y arranca con ella si la nube no responde, en vez de dejarte en la pantalla de login. También podés entrar sin conexión a propósito.

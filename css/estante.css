@@ -14,9 +14,26 @@
    Muro de estanterías
    ---------------------------------------- */
 
-/* Aviso para quien vuelva a meter el mueble dentro de una rejilla: si el
-   contenedor es display:grid, el muro entra como una celda y el canvas sale
-   del tamaño de un sello. Hoy #estante-raiz es un bloque y no pasa. */
+/* El mueble, dentro de .shelf-column. Aviso para quien lo mueva: si el
+   contenedor pasa a display:grid, el muro entra como una celda y el canvas
+   sale del tamaño de un sello. Y necesita min-height:0 o, como hijo flex,
+   se niega a encoger por debajo de su contenido y desborda el shell. */
+.bookcase {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Pista de gestos: girar con la rueda pulsada no lo adivina nadie, y la
+   leyenda que lo decía se fue a la barra superior. */
+.estante-gestos {
+    flex: 0 0 auto;
+    margin-top: var(--esp-sm);
+    color: var(--tinta-tenue);
+    font-size: 11px;
+    text-align: center;
+}
 
 .estante-muro {
     display: flex;
@@ -62,60 +79,6 @@
     opacity: 0.05;
     background-image: radial-gradient(var(--tinta) 0.5px, transparent 0.5px);
     background-size: 3px 3px;
-}
-
-/* ----------------------------------------
-   Leyenda de estados
-   ---------------------------------------- */
-/* En el muro el estado de un libro es una banda de color y nada más. La
-   leyenda es lo que impide que la identidad dependa solo del color: cada
-   entrada lleva nombre y número. */
-
-.estante-leyenda {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--esp-md);
-    flex: 0 0 auto;
-    /* El hueco de la derecha es para el botón "···", que flota encima y no
-       ocupa sitio en el flujo: sin reservarlo, se come el final de la pista. */
-    padding: var(--esp-sm) calc(var(--esp-md) + 44px) var(--esp-sm) var(--esp-md);
-    border: 1px solid var(--borde);
-    border-radius: 999px;
-    background: var(--superficie);
-    box-shadow: var(--luz-filo);
-    font-size: 0.8rem;
-    color: var(--tinta-suave);
-}
-
-.estante-leyenda-item {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--esp-xs);
-    white-space: nowrap;
-}
-
-.estante-leyenda-punto {
-    width: 9px;
-    height: 9px;
-    border-radius: 2px;
-    flex: 0 0 auto;
-}
-
-.estante-leyenda-punto.leido     { background: var(--leido); }
-.estante-leyenda-punto.leyendo   { background: var(--leyendo); }
-.estante-leyenda-punto.pendiente { background: var(--pendiente); }
-
-.estante-leyenda-valor {
-    color: var(--tinta);
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-}
-
-.estante-leyenda-pista {
-    margin-left: auto;
-    color: var(--tinta-tenue);
-    font-size: 0.74rem;
 }
 
 /* ----------------------------------------
@@ -404,11 +367,11 @@
 /* ----------------------------------------
    Girar el mueble
    ----------------------------------------
-   El cursor es lo único que anuncia que la escena se puede arrastrar: no hay
-   ningún control visible, a propósito. Sobre un libro manda `pointer`, que lo
-   pone estante3d.js en línea y gana a esto por especificidad de estilo. */
+   Ya no se arrastra el mueble con el botón izquierdo —eso lo sustituyó el
+   parálax que sigue al cursor— así que un cursor de agarre mentiría. Queda
+   el de defecto, y `pointer` sobre un libro, que lo pone estante3d.js en
+   línea. `grabbing` sigue saliendo al girar con la rueda pulsada. */
 
-.estante-escena.orbitable { cursor: grab; }
 .estante-escena.orbitable.girando { cursor: grabbing; }
 
 /* Mientras se gira no queremos que el navegador intente seleccionar texto del
@@ -418,3 +381,9 @@
     -webkit-user-select: none;
     user-select: none;
 }
+
+/* ----------------------------------------
+   Ajustes al shell del diseño
+   ---------------------------------------- */
+/* El muro llena la caja del mueble, que ya reparte el alto. */
+.bookcase .estante-muro { height: 100%; }

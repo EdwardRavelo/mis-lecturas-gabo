@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biblioteca Gabriel García Márquez</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2317120E'/%3E%3Crect x='8' y='6' width='13' height='20' rx='1.5' fill='%23C9A227'/%3E%3Crect x='9.5' y='7.5' width='10' height='17' rx='1' fill='%23F4EDE3'/%3E%3Crect x='11' y='11' width='7' height='1.5' rx='0.75' fill='%2317120E' opacity='0.5'/%3E%3Crect x='11' y='14.5' width='5' height='1.5' rx='0.75' fill='%2317120E' opacity='0.5'/%3E%3Crect x='21' y='6' width='2.5' height='20' rx='1' fill='%23F4EDE3' opacity='0.85'/%3E%3C/svg%3E">
+    <title>Diario de Lecturas</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23100F0D'/%3E%3Crect x='8' y='6' width='13' height='20' rx='1.5' fill='%23BF8550'/%3E%3Crect x='9.5' y='7.5' width='10' height='17' rx='1' fill='%23E9E4DB'/%3E%3Crect x='11' y='11' width='7' height='1.5' rx='0.75' fill='%23100F0D' opacity='0.5'/%3E%3Crect x='11' y='14.5' width='5' height='1.5' rx='0.75' fill='%23100F0D' opacity='0.5'/%3E%3Crect x='21' y='6' width='2.5' height='20' rx='1' fill='%23E9E4DB' opacity='0.85'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/animations.css">
     <link rel="stylesheet" href="css/estante.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Instrument Serif (display) y Plus Jakarta Sans (datos). Solo se carga
-         lo que alguna regla usa: no añadir familias sueltas "por si acaso". -->
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Playfair Display (display) y DM Sans (datos), del diseño de Figma.
+         Solo se carga lo que alguna regla usa: no añadir familias sueltas. -->
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;1,500&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -20,12 +20,16 @@
     <!-- Pantalla de Login                -->
     <!-- ================================ -->
     <div class="login-screen active" id="login-screen">
+        <!-- El mueble de fondo. Es decoración: no se pulsa, no lleva espejo
+             accesible, y si no hay WebGL no se monta nada y el login queda
+             como siempre. -->
+        <div class="login-fondo" id="login-fondo" aria-hidden="true"></div>
+
         <div class="login-card">
-            <div class="login-decoration">✦</div>
-            <h1 class="login-title">Gabriel<br>García Márquez</h1>
-            <p class="login-subtitle">Biblioteca Personal</p>
+            <h1 class="login-title">Diario de<br>Lecturas</h1>
+            <p class="login-subtitle">Lo que leo, por temas</p>
             <p class="login-description">
-                Inicia sesión para guardar tu progreso de lectura en la nube y acceder desde cualquier dispositivo.
+                Inicia sesión para guardar tu progreso en la nube y llegar a él desde cualquier dispositivo.
             </p>
 
             <div class="login-buttons">
@@ -34,15 +38,6 @@
                         <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
                     </svg>
                     Continuar con GitHub
-                </button>
-                <button class="login-btn login-btn-google" id="btn-login-google">
-                    <svg width="20" height="20" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                    </svg>
-                    Continuar con Google
                 </button>
                 <button class="login-btn login-btn-offline" id="btn-login-offline">
                     Entrar sin conexión
@@ -67,49 +62,128 @@
     </div>
 
     <!-- ================================ -->
-    <!-- Layout: el mueble y nada más     -->
+    <!-- Shell: barra, colecciones, sala   -->
     <!-- ================================ -->
-    <!-- Sin barra lateral, sin rejilla de tarjetas y sin panel de análisis:
-         la ventana entera es la estantería. Todo lo que antes ocupaba la
-         columna izquierda vive ahora dentro del menú "···". -->
+    <!-- La estructura viene del diseño de Figma. Donde el diseño dibuja una
+         librería en CSS, aquí va el lienzo WebGL: ver css/estante.css. -->
     <div class="library-layout" style="display:none;">
-        <main class="main-content">
-            <div id="estante-raiz">
-                <!-- El mueble lo monta app.js aquí -->
+
+        <header class="topbar">
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true">D</span>
+                <p class="brand-name">Diario de Lecturas</p>
             </div>
-        </main>
 
-        <!-- Menú: búsqueda, filtro, altas, respaldo y sesión -->
-        <button class="menu-btn" id="menu-btn" type="button"
-                aria-haspopup="true" aria-expanded="false" aria-controls="menu-panel"
-                aria-label="Abrir menú">···</button>
+            <div class="status-filters" id="status-filters" aria-label="Filtrar por estado">
+                <button class="status-pill" type="button" data-filter="Leído">
+                    <span class="status-dot read"></span>
+                    <span>Leídos</span>
+                    <strong id="total-leidos">0</strong>
+                </button>
+                <button class="status-pill" type="button" data-filter="Leyendo">
+                    <span class="status-dot reading"></span>
+                    <span>Leyendo</span>
+                    <strong id="total-leyendo">0</strong>
+                </button>
+                <button class="status-pill" type="button" data-filter="Pendiente">
+                    <span class="status-dot pending"></span>
+                    <span>Pendientes</span>
+                    <strong id="total-pendientes">0</strong>
+                </button>
+            </div>
 
+            <div class="top-actions">
+                <div class="search-box" id="search-box">
+                    <input type="text" id="search-input" placeholder="Buscar en tu biblioteca"
+                           aria-label="Buscar en tu biblioteca" autocomplete="off">
+                    <button class="icon-button" type="button" id="btn-buscar" aria-label="Buscar"
+                            aria-expanded="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+                    </button>
+                </div>
+
+                <button class="add-button" type="button" id="btn-nuevo-libro">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    <span>Añadir libro</span>
+                </button>
+
+                <button class="icon-button quiet" type="button" id="menu-btn"
+                        aria-haspopup="true" aria-expanded="false" aria-controls="menu-panel"
+                        aria-label="Más opciones">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <nav class="category-nav" aria-label="Colecciones">
+            <div class="nav-intro">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>
+                <span>Colecciones</span>
+            </div>
+            <!-- La lista la pinta renderizarColecciones() con los temas reales -->
+            <div class="category-list" id="category-list"></div>
+            <p id="cuenta-visibles"></p>
+        </nav>
+
+        <section class="library-room">
+            <div class="ambient-light" aria-hidden="true"></div>
+
+            <div class="shelf-column">
+                <!-- El mueble. El lienzo WebGL lo monta app.js aquí dentro. -->
+                <div class="bookcase" id="estante-raiz"></div>
+            </div>
+
+            <!-- Ficha del libro seleccionado. Resume; para editar abre el modal. -->
+            <aside class="book-detail" id="book-detail">
+                <button class="detail-close" type="button" id="detail-close" aria-label="Cerrar ficha">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+                </button>
+                <!-- Sin libro elegido la columna no se esconde: dejaría un hueco
+                     de 310px en blanco. Enseña a qué sirve. -->
+                <p class="detail-vacio" id="detail-vacio">
+                    Elige un libro del estante para ver su ficha.
+                </p>
+
+                <div id="detail-cuerpo" hidden>
+
+                <div class="cover" id="detail-cover">
+                    <span class="cover-rule"></span>
+                    <small id="detail-tema"></small>
+                    <strong id="detail-titulo-tapa"></strong>
+                    <span id="detail-autor-tapa"></span>
+                    <i>Diario de Lecturas</i>
+                </div>
+
+                <div class="detail-copy">
+                    <span class="state-badge" id="detail-estado"></span>
+                    <h2 id="detail-titulo"></h2>
+                    <p class="author" id="detail-autor"></p>
+
+                    <div class="progress-copy">
+                        <span id="detail-progreso-label">Progreso de lectura</span>
+                        <strong id="detail-progreso">0%</strong>
+                    </div>
+                    <div class="progress-track"><span id="detail-progreso-barra"></span></div>
+
+                    <blockquote id="detail-nota" hidden></blockquote>
+
+                    <button class="detail-action" type="button" id="btn-ver-detalles">
+                        Ver notas y detalles
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M14 7l5 5-5 5"/></svg>
+                    </button>
+                </div>
+                </div>
+            </aside>
+        </section>
+
+        <!-- Menú: lo que no cabe en la barra -->
         <div class="menu-velo" id="menu-velo" hidden></div>
 
         <div class="menu-panel" id="menu-panel" role="menu" hidden>
             <div class="menu-seccion">
-                <label class="menu-titulo" for="search-input">Buscar</label>
-                <input type="text" id="search-input" class="menu-buscar"
-                       placeholder="Título o autor…" autocomplete="off">
-            </div>
-
-            <div class="menu-seccion">
-                <span class="menu-titulo">Estado</span>
-                <div class="menu-filtros">
-                    <button class="menu-filtro active" type="button" data-filter="Todos">Todos</button>
-                    <button class="menu-filtro" type="button" data-filter="Leído">Leídos</button>
-                    <button class="menu-filtro" type="button" data-filter="Leyendo">Leyendo</button>
-                    <button class="menu-filtro" type="button" data-filter="Pendiente">Pendientes</button>
-                </div>
-            </div>
-
-            <div class="menu-seccion">
                 <span class="menu-titulo">Añadir</span>
                 <button class="menu-accion" type="button" id="btn-nuevo-tema">
                     <span class="menu-accion-icono" aria-hidden="true">▤</span> Nuevo tema
-                </button>
-                <button class="menu-accion" type="button" id="btn-nuevo-libro">
-                    <span class="menu-accion-icono" aria-hidden="true">＋</span> Una lectura
                 </button>
                 <button class="menu-accion" type="button" id="btn-nuevas-lecturas">
                     <span class="menu-accion-icono" aria-hidden="true">≡</span> Varias lecturas
@@ -304,7 +378,7 @@
 
                     <div class="form-group">
                         <label class="form-label" for="tema-color">Color de acento</label>
-                        <input type="color" id="tema-color" class="form-input form-input-color" value="#C9A227">
+                        <input type="color" id="tema-color" class="form-input form-input-color" value="#BF8550">
                     </div>
 
                     <button type="submit" class="btn btn-primary btn-full">Guardar tema</button>

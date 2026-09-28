@@ -14,3 +14,7 @@ desktop.ini
 
 # Permisos locales de Claude Code (son de esta máquina, no del proyecto)
 .claude/settings.local.json
+
+# El export de Figma Make: referencia de diseño, no código de la app.
+# Se consulta al portar, pero no se compila ni se sirve.
+Figma/

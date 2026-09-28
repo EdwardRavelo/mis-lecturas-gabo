@@ -17,6 +17,14 @@ const CLAVE_CACHE = 'gaboLecturas';
 document.addEventListener('DOMContentLoaded', async () => {
     inicializarEventListeners();
 
+    // El login ya viene visible desde el HTML, así que el fondo se monta
+    // aquí y no solo desde mostrarPantallaLogin(): mientras se espera a
+    // getSession() —hasta 8 segundos— esa función todavía no ha corrido y
+    // la pantalla se quedaría sin fondo justo durante la espera.
+    if (document.getElementById('login-screen')?.classList.contains('active')) {
+        montarFondoLogin();
+    }
+
     if (supabaseConfigurado) {
         try {
             const usuario = await inicializarAuth();
@@ -369,6 +377,12 @@ async function cargarTodasLasPortadas() {
 function actualizarInterfaz() {
     actualizarAccionesCatalogo();
     renderizarLibros();
+    // La ficha se repinta con los datos nuevos: si acabas de marcar un libro
+    // como leído, el estado y el progreso de la columna tienen que moverse.
+    if (libroEnFicha) {
+        const libro = buscarLibro(libroEnFicha);
+        libro ? renderizarFicha(libro) : cerrarFicha();
+    }
     cargarTodasLasPortadas();
 }
 
@@ -384,6 +398,13 @@ function renderizarLibros() {
 
     let visibles = libros;
 
+    // La colección elegida en el nav filtra antes que nada.
+    if (temaActual === 'sin-tema') {
+        visibles = visibles.filter(libro => !libro.tema_id);
+    } else if (temaActual) {
+        visibles = visibles.filter(libro => libro.tema_id === temaActual);
+    }
+
     if (filtroActual !== 'Todos') {
         visibles = visibles.filter(libro => libro.estado === filtroActual);
     }
@@ -397,6 +418,9 @@ function renderizarLibros() {
     }
 
     raiz.innerHTML = '';
+    actualizarRecuentos();
+    renderizarColecciones();
+    actualizarTituloSeccion(visibles);
 
     if (visibles.length === 0) {
         raiz.innerHTML = `<p class="estante-vacio">${
@@ -408,6 +432,237 @@ function renderizarLibros() {
     }
 
     renderizarEstante(raiz, visibles);
+}
+
+// ========================================
+// Fondo del login
+// ========================================
+// El mueble detrás de la tarjeta de entrada: lo primero que se ve es el
+// producto y no una tarjeta sobre negro.
+//
+// Reutiliza montarMuro() tal cual, sin callbacks. Eso no es un atajo: el
+// fondo ES el mismo `muro` del módulo, así que el desmontaje ya está resuelto
+// —renderizarLibros() empieza llamando a desmontarMuro()— y nunca puede haber
+// dos contextos WebGL vivos. Esa regla está explicada en CLAUDE.md.
+//
+// Es decoración: no se pulsa (pointer-events: none en el CSS), no lleva
+// espejo accesible y no toca `libros` ni `temas`.
+
+// Baldas de adorno para cuando no hay caché, es decir, cuando nadie ha
+// entrado todavía en este navegador.
+const TEMAS_ADORNO = [
+    { nombre: 'Novela', color: '#c98500' },
+    { nombre: 'Ensayo', color: '#3987e5' },
+    { nombre: 'Historia', color: '#199e70' },
+    { nombre: 'Poesía', color: '#9085e9' }
+];
+
+function baldasDeAdorno() {
+    // Si hay caché local, el fondo es TU estante: quien vuelve ve sus libros.
+    const cache = leerCacheLocal();
+    if (cache?.temas?.length && cache?.libros?.length) {
+        const reales = cache.temas
+            .map(t => ({
+                id: t.id,
+                nombre: t.nombre,
+                color: t.color || token('--laton', '#BF8550'),
+                libros: cache.libros.filter(l => l.tema_id === t.id)
+            }))
+            .filter(b => b.libros.length);
+        if (reales.length) return reales;
+    }
+
+    // Inventadas, pero deterministas como todo lo que alimenta al mueble.
+    return TEMAS_ADORNO.map((tema, i) => {
+        const cuantos = 7 + Math.floor(hashEstante('adorno' + i) * 12);
+        const libros = [];
+        for (let n = 0; n < cuantos; n++) {
+            const id = 'adorno-' + i + '-' + n;
+            const suerte = hashEstante(id + '|estado');
+            libros.push({
+                id: id,
+                titulo: '',
+                tema_id: 'adorno-' + i,
+                // Reparto parecido al de una biblioteca de verdad: más
+                // pendientes que leídos.
+                estado: suerte < 0.22 ? 'Leído' : suerte < 0.38 ? 'Leyendo' : 'Pendiente',
+                paginas: null
+            });
+        }
+        return { id: 'adorno-' + i, nombre: tema.nombre, color: tema.color, libros };
+    });
+}
+
+function montarFondoLogin() {
+    const contenedor = document.getElementById('login-fondo');
+    if (!contenedor || !estanteDisponible) return;
+    if (contenedor.querySelector('canvas')) return;   // ya montado
+
+    montarMuro(contenedor, baldasDeAdorno(), null, null, null);
+}
+
+// ========================================
+// Chrome: barra, colecciones y ficha
+// ========================================
+// Todo esto viene del diseño de Figma. Los filtros y la búsqueda vuelven a la
+// barra superior —estuvieron un tiempo dentro del menú «···»— y el menú se
+// queda con lo que no cabe arriba: altas, respaldo y sesión.
+
+// Tema por el que se filtra. null = todos. Vuelve a existir tras el recorte
+// que lo eliminó, pero ahora es SOLO un filtro del muro: no cambia el acento
+// global ni nada más.
+let temaActual = null;
+
+function renderizarColecciones() {
+    const lista = document.getElementById('category-list');
+    if (!lista) return;
+
+    const hayHuerfanos = libros.some(l => !l.tema_id);
+    const entradas = [{ id: null, nombre: 'Todos' }]
+        .concat(temas.map(t => ({ id: t.id, nombre: t.nombre })));
+    if (hayHuerfanos) entradas.push({ id: 'sin-tema', nombre: 'Sin tema' });
+
+    lista.innerHTML = entradas.map(e =>
+        '<button type="button" data-tema="' + escaparHtml(e.id ?? '') + '"' +
+        (e.id === temaActual ? ' class="active"' : '') + '>' +
+        escaparHtml(e.nombre) + '</button>'
+    ).join('');
+}
+
+function seleccionarColeccion(valor) {
+    temaActual = valor === '' ? null : valor;
+    renderizarColecciones();
+    renderizarLibros();
+}
+
+// Recuentos de la barra. Son sobre TODA la biblioteca, no sobre lo filtrado:
+// son el mapa de dónde estás, y encogerlos al filtrar los volvería inútiles.
+function actualizarRecuentos() {
+    const poner = (id, valor) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = valor;
+    };
+    poner('total-leidos', libros.filter(l => l.estado === 'Leído').length);
+    poner('total-leyendo', libros.filter(l => l.estado === 'Leyendo').length);
+    poner('total-pendientes', libros.filter(l => l.estado === 'Pendiente').length);
+}
+
+// El encabezado de la sala se retiró: repetía la marca y la colección
+// activa, que ya se ve resaltada en el nav. Queda el recuento, que sí dice
+// algo que no está en ningún otro sitio.
+function actualizarTituloSeccion(visibles) {
+    const cuenta = document.getElementById('cuenta-visibles');
+    if (cuenta) {
+        cuenta.textContent = visibles.length === 1
+            ? '1 volumen visible'
+            : visibles.length + ' volúmenes visibles';
+    }
+}
+
+// ----------------------------------------
+// Ficha lateral
+// ----------------------------------------
+// Resume el libro seleccionado. Para editar —fechas, comentarios, estado— el
+// botón «Ver notas y detalles» abre el modal de siempre, que sigue siendo el
+// único sitio donde se escribe. Así la ficha no duplica el formulario.
+
+let libroEnFicha = null;
+
+function seleccionarLibro(id) {
+    const libro = buscarLibro(id);
+    if (!libro) return;
+    libroEnFicha = id;
+    renderizarFicha(libro);
+}
+
+function cerrarFicha() {
+    libroEnFicha = null;
+    const cuerpo = document.getElementById('detail-cuerpo');
+    const vacio = document.getElementById('detail-vacio');
+    if (cuerpo) cuerpo.hidden = true;
+    if (vacio) vacio.hidden = false;
+}
+
+function renderizarFicha(libro) {
+    const ficha = document.getElementById('book-detail');
+    if (!ficha) return;
+
+    const poner = (id, valor) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = valor ?? '';
+    };
+
+    const tema = temas.find(t => t.id === libro.tema_id);
+    const acento = tema?.color || token('--laton', '#BF8550');
+
+    // El acento de la tapa es el del tema: la ficha se tiñe del color de la
+    // balda de la que sale el libro.
+    ficha.style.setProperty('--tema-acento', acento);
+
+    poner('detail-tema', tema?.nombre || 'Sin tema');
+    poner('detail-titulo-tapa', libro.titulo);
+    poner('detail-autor-tapa', libro.autor || '');
+    poner('detail-titulo', libro.titulo);
+    poner('detail-autor', [libro.autor, libro.año].filter(Boolean).join(' · '));
+
+    const insignia = document.getElementById('detail-estado');
+    if (insignia) {
+        insignia.textContent = libro.estado;
+        insignia.className = 'state-badge ' + claseEstado(libro.estado);
+    }
+
+    // El progreso de un libro leído es 100; el de uno en curso se estima con
+    // los días transcurridos contra el promedio, igual que en el modal.
+    calcularDias(libro);
+    let progreso = 0;
+    if (libro.estado === 'Leído') {
+        progreso = 100;
+    } else if (libro.estado === 'Leyendo' && libro.inicio) {
+        const promedio = calcularPromedioDias();
+        progreso = Math.min(((libro.dias || 0) / (promedio > 0 ? promedio : 30)) * 100, 95);
+    }
+    poner('detail-progreso', Math.round(progreso) + '%');
+    const barra = document.getElementById('detail-progreso-barra');
+    if (barra) barra.style.width = progreso + '%';
+
+    // La cita del diseño era de relleno. Aquí va tu propio comentario, si lo
+    // hay, y si no la sección desaparece en vez de inventarse una frase.
+    const nota = document.getElementById('detail-nota');
+    if (nota) {
+        const texto = (libro.comentarios || '').trim();
+        nota.textContent = texto ? '“' + texto + '”' : '';
+        nota.hidden = !texto;
+    }
+
+    const cuerpo = document.getElementById('detail-cuerpo');
+    const vacio = document.getElementById('detail-vacio');
+    if (cuerpo) cuerpo.hidden = false;
+    if (vacio) vacio.hidden = true;
+    ficha.scrollTop = 0;
+}
+
+// ----------------------------------------
+// Buscador desplegable
+// ----------------------------------------
+
+function alternarBuscador(abrir) {
+    const caja = document.getElementById('search-box');
+    const boton = document.getElementById('btn-buscar');
+    const input = document.getElementById('search-input');
+    if (!caja || !boton || !input) return;
+
+    const abierto = abrir ?? !caja.classList.contains('open');
+    caja.classList.toggle('open', abierto);
+    boton.setAttribute('aria-expanded', String(abierto));
+
+    if (abierto) {
+        input.focus();
+    } else if (input.value) {
+        // Cerrar el buscador limpia el filtro: dejarlo puesto y escondido es
+        // la mejor forma de que parezca que faltan libros.
+        input.value = '';
+        renderizarLibros();
+    }
 }
 
 // ========================================
@@ -433,7 +688,7 @@ function baldasDesde(visibles) {
         baldas.push({
             id: tema.id,
             nombre: tema.nombre,
-            color: tema.color || token('--laton', '#C9A227'),
+            color: tema.color || token('--laton', '#BF8550'),
             libros: porTema.get(tema.id)
         });
     });
@@ -442,7 +697,7 @@ function baldasDesde(visibles) {
         baldas.push({
             id: 'sin-tema',
             nombre: 'Sin tema',
-            color: token('--tinta-tenue', '#8C7C68'),
+            color: token('--tinta-tenue', '#69665F'),
             libros: porTema.get('sin-tema')
         });
     }
@@ -455,7 +710,6 @@ function renderizarEstante(grid, visibles) {
 
     const muroEl = document.createElement('div');
     muroEl.className = 'estante-muro';
-    muroEl.appendChild(crearLeyendaEstante(visibles));
 
     const escena = document.createElement('div');
     escena.className = 'estante-escena';
@@ -463,10 +717,18 @@ function renderizarEstante(grid, visibles) {
     muroEl.appendChild(crearEspejoEstante(baldas, enfocarLibroEnMuro));
     grid.appendChild(muroEl);
 
+    const gestos = document.createElement('p');
+    gestos.className = 'estante-gestos';
+    gestos.textContent = 'Rueda para acercar · pulsa la rueda para girar';
+    grid.appendChild(gestos);
+
     // montarMuro devuelve false si Three.js no llegó o no hay WebGL. Entonces
     // se cambia la escena por el estante plano y la app sigue igual de usable:
     // la misma regla que ya sigue la gráfica de páginas.
-    const montado = montarMuro(escena, baldas, abrirEstante, abrirModalEdicion, mostrarPista);
+    // Pulsar un lomo rellena la ficha lateral. El modal completo se abre
+    // desde ahí, con «Ver notas y detalles»: así el mueble y el detalle se
+    // ven a la vez, que es la gracia de la columna.
+    const montado = montarMuro(escena, baldas, abrirEstante, seleccionarLibro, mostrarPista);
     if (!montado) {
         escena.remove();
         muroEl.insertBefore(crearEstantePlano(baldas), muroEl.querySelector('.estante-espejo'));
@@ -508,29 +770,6 @@ function mostrarPista(libroId, evento) {
     if (x + caja.width > window.innerWidth - 8) x = evento.clientX - caja.width - margen;
     if (y + caja.height > window.innerHeight - 8) y = evento.clientY - caja.height - margen;
     pistaEl.style.transform = 'translate(' + Math.max(8, x) + 'px, ' + Math.max(8, y) + 'px)';
-}
-
-function crearLeyendaEstante(visibles) {
-    const cuenta = estado => visibles.filter(l => l.estado === estado).length;
-    const filas = [
-        { clase: 'leido', etiqueta: 'Leídos', valor: cuenta('Leído') },
-        { clase: 'leyendo', etiqueta: 'Leyendo', valor: cuenta('Leyendo') },
-        { clase: 'pendiente', etiqueta: 'Pendientes', valor: cuenta('Pendiente') }
-    ];
-
-    const el = document.createElement('div');
-    el.className = 'estante-leyenda';
-    // Nombre y número en cada entrada: en el muro el estado es una banda de
-    // color, y la identidad no puede depender solo del color.
-    el.innerHTML = filas.map(f =>
-        '<span class="estante-leyenda-item">' +
-        '<span class="estante-leyenda-punto ' + f.clase + '"></span>' +
-        f.etiqueta +
-        '<span class="estante-leyenda-valor">' + f.valor + '</span>' +
-        '</span>'
-    ).join('') +
-    '<span class="estante-leyenda-pista">Arrastra para moverte · rueda para acercar · pulsa la rueda para girar</span>';
-    return el;
 }
 
 // El espejo accesible: el mueble en DOM real, invisible pero enfocable. Sin
@@ -624,7 +863,7 @@ function abrirEstante(baldaId) {
         : libros.filter(l => l.tema_id === baldaId);
 
     const nombre = esSinTema ? 'Sin tema' : tema.nombre;
-    const acento = (esSinTema ? null : tema.color) || token('--laton', '#C9A227');
+    const acento = (esSinTema ? null : tema.color) || token('--laton', '#BF8550');
 
     document.getElementById('estante-modal-titulo').textContent = nombre;
     document.getElementById('estante-modal-cuenta').textContent =
@@ -716,12 +955,17 @@ function abrirModalEdicion(id) {
 
     libroEditando = id;
 
-    // Se asigna siempre, también el 'none': si no, la portada del libro
-    // anterior se queda pegada al abrir uno que no tiene. El fondo del hueco
-    // lo pone el CSS, no un degradado a mano.
+    // Sin portada, el hueco se oculta entero. Antes solo se le quitaba la
+    // imagen, y el elemento seguía ahí con su borde y sus 68x96: como las
+    // portadas no cargan nunca —Google Books sin clave responde 429—, cada
+    // libro que abrías enseñaba un rectángulo gris vacío.
+    //
+    // Se reasigna siempre, también al ocultar: si no, la portada del libro
+    // anterior se queda pegada al abrir uno que no tiene.
     const portada = document.getElementById('modal-hero-image');
     if (portada) {
         portada.style.backgroundImage = libro.portada ? `url(${libro.portada})` : 'none';
+        portada.hidden = !libro.portada;
     }
 
     const poner = (id, valor) => {
@@ -892,7 +1136,7 @@ function abrirModalTema(id = null) {
     document.getElementById('tema-nombre').value = tema?.nombre || '';
     // Por defecto, el mismo acento que --tema-acento en :root (latón). El
     // verde neón que había aquí era de la paleta anterior.
-    document.getElementById('tema-color').value = tema?.color || '#C9A227';
+    document.getElementById('tema-color').value = tema?.color || '#BF8550';
     document.getElementById('tema-id').value = id || '';
 
     const btnBorrar = document.getElementById('btn-borrar-tema');
@@ -1271,7 +1515,7 @@ async function crearLoteLecturas() {
 // ========================================
 function aplicarFiltro(filtro) {
     filtroActual = filtro;
-    document.querySelectorAll('.menu-filtro').forEach(btn => {
+    document.querySelectorAll('.status-pill').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.filter === filtro);
     });
     renderizarLibros();
@@ -1340,9 +1584,27 @@ function inicializarEventListeners() {
     document.getElementById('menu-btn')?.addEventListener('click', alternarMenu);
     document.getElementById('menu-velo')?.addEventListener('click', cerrarMenu);
 
-    // Filtros por estado
-    document.querySelectorAll('.menu-filtro').forEach(btn => {
-        btn.addEventListener('click', () => aplicarFiltro(btn.dataset.filter));
+    // Filtros de estado en la barra. Vuelven a pulsarse para desactivarse:
+    // sin eso no habría forma de volver a «Todos», porque no hay pastilla.
+    document.querySelectorAll('.status-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+            aplicarFiltro(filtroActual === btn.dataset.filter ? 'Todos' : btn.dataset.filter);
+        });
+    });
+
+    // Colecciones: delegado, porque la lista se repinta en cada render.
+    document.getElementById('category-list')?.addEventListener('click', e => {
+        const btn = e.target.closest('button[data-tema]');
+        if (btn) seleccionarColeccion(btn.dataset.tema);
+    });
+
+    // Buscador desplegable
+    document.getElementById('btn-buscar')?.addEventListener('click', () => alternarBuscador());
+
+    // Ficha lateral
+    document.getElementById('detail-close')?.addEventListener('click', cerrarFicha);
+    document.getElementById('btn-ver-detalles')?.addEventListener('click', () => {
+        if (libroEnFicha) abrirModalEdicion(libroEnFicha);
     });
 
     // Búsqueda con debounce. El menú NO se cierra al escribir: se ve el mueble
@@ -1472,6 +1734,9 @@ function inicializarEventListeners() {
         if (document.getElementById('libro-modal')?.classList.contains('active')) return cerrarModalLibro();
         if (document.getElementById('tema-modal')?.classList.contains('active')) return cerrarModalTema();
         if (document.getElementById('edit-modal')?.classList.contains('active')) return cerrarModal();
+        if (document.getElementById('search-box')?.classList.contains('open')) {
+            return alternarBuscador(false);
+        }
         if (menuAbierto()) return cerrarMenu();
     });
 }
@@ -1486,5 +1751,6 @@ window.gaboApp = {
     exportarDatos,
     importarDatos,
     actualizarInterfaz,
-    inicializarEventListeners
+    inicializarEventListeners,
+    montarFondoLogin
 };

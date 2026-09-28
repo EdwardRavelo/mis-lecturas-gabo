@@ -118,7 +118,7 @@ const CROMA_POR_ESTADO = {
 };
 
 function colorLomo(libro, acentoHex) {
-    const base = new THREE.Color(acentoHex || '#C9A227');
+    const base = new THREE.Color(acentoHex || '#BF8550');
     const hsl = { h: 0, s: 0, l: 0 };
     base.getHSL(hsl);
     const n = hashEstante(libro.id + '|lomo');
@@ -146,9 +146,9 @@ function colorLomo(libro, acentoHex) {
 }
 
 function colorEstado(estado) {
-    if (estado === 'Leído') return token('--leido', '#2FA377');
-    if (estado === 'Leyendo') return token('--leyendo', '#BE831C');
-    return token('--pendiente', '#8676E0');
+    if (estado === 'Leído') return token('--leido', '#37A06A');
+    if (estado === 'Leyendo') return token('--leyendo', '#C07E24');
+    return token('--pendiente', '#9184DC');
 }
 
 // ----------------------------------------
@@ -210,12 +210,12 @@ function texturaTrasera(nombre, cuenta, acentoHex, ancho, alto) {
     const cuerpo = Math.round(H * 0.18);
     ctx.textBaseline = 'middle';
     ctx.font = '700 ' + cuerpo + 'px "Plus Jakarta Sans", system-ui, sans-serif';
-    ctx.fillStyle = token('--tinta', '#F4EDE3');
+    ctx.fillStyle = token('--tinta', '#E9E4DB');
     ctx.fillText(nombre, W * 0.035, H * 0.13, W * 0.72);
 
     const anchoNombre = Math.min(ctx.measureText(nombre).width, W * 0.72);
     ctx.font = '600 ' + Math.round(cuerpo * 0.72) + 'px "Plus Jakarta Sans", system-ui, sans-serif';
-    ctx.fillStyle = acentoHex || token('--laton', '#C9A227');
+    ctx.fillStyle = acentoHex || token('--laton', '#BF8550');
     ctx.fillText(String(cuenta), W * 0.035 + anchoNombre + cuerpo * 0.45, H * 0.135);
 
     // Filete bajo el rótulo, del ancho del nombre
@@ -267,7 +267,7 @@ function construirTexturaHojas(variante) {
     lienzo.height = 64;
     const ctx = lienzo.getContext('2d');
 
-    const papel = new THREE.Color(token('--tinta-suave', '#C3B4A2')).multiplyScalar(0.94);
+    const papel = new THREE.Color(token('--tinta-suave', '#928C81')).multiplyScalar(0.94);
     ctx.fillStyle = '#' + papel.getHexString();
     ctx.fillRect(0, 0, 256, 64);
 
@@ -350,7 +350,7 @@ function texturaMadera(ancho, fondo) {
     const ctx = lienzo.getContext('2d');
 
     vetaMadera(ctx, lienzo.width, lienzo.height,
-               token('--madera-clara', '#7A5335'), token('--madera', '#4A3120'));
+               token('--madera-clara', '#6E492E'), token('--madera', '#4E301E'));
 
     const tex = new THREE.CanvasTexture(lienzo);
     tex.encoding = THREE.sRGBEncoding;
@@ -398,7 +398,7 @@ function texturaLomo(libro, colorFondo) {
     const tinta = claro ? 'rgba(18,12,8,0.92)' : 'rgba(246,240,232,0.94)';
 
     // Filetes de latón arriba y abajo, como en una encuadernación
-    ctx.fillStyle = token('--laton', '#C9A227');
+    ctx.fillStyle = token('--laton', '#BF8550');
     ctx.globalAlpha = 0.8;
     ctx.fillRect(16, 40, 96, 3);
     ctx.fillRect(16, 470, 96, 3);
@@ -614,7 +614,10 @@ const LIMITES_ORBITA = {
     // balda aproximadamente: acercarse a leer los lomos es media razón de
     // que exista el zoom, y con 0.55 te quedabas mirando el mueble entero.
     cerca: 0.22,
-    lejos: 1.6
+    // 1.6 dejaba llegar tan lejos que el mueble quedaba diminuto y empezaba
+    // a verse el borde de la habitación. 1.25 es lo que cabe sin que la
+    // escena se deshaga por fuera.
+    lejos: 1.25
 };
 
 // La inercia es movimiento que el usuario no pidió: con movimiento reducido
@@ -633,19 +636,19 @@ function crearControles(camara, dom, centro, distancia) {
     const c = new THREE.OrbitControls(camara, dom);
     c.target.copy(centro);
 
-    // Izquierda desplaza, rueda pulsada gira: navegar es lo que se hace
-    // todo el rato y se queda en el gesto principal; girar es el gesto de
-    // mirar. El botón derecho queda libre a propósito.
+    // El botón izquierdo NO mueve nada: solo selecciona. El desplazamiento
+    // libre que tenía se sentía caótico —te ibas a cualquier lado y te
+    // perdías—, y lo sustituye el parálax de montarMuro(), que sigue al
+    // cursor unos grados y vuelve solo al centro.
+    //
+    // Sin paneo se sigue llegando a cualquier balda: la rueda acerca al
+    // cursor y el nav de colecciones filtra.
     c.mouseButtons = {
-        LEFT: THREE.MOUSE.PAN,
+        LEFT: null,
         MIDDLE: THREE.MOUSE.ROTATE,
         RIGHT: null
     };
-    c.enablePan = true;
-    c.panSpeed = 0.9;
-    // En el plano de pantalla: el mueble es una pared, y panear siguiendo
-    // el suelo lo mandaría hacia atrás en vez de hacia los lados.
-    c.screenSpacePanning = true;
+    c.enablePan = false;
     c.rotateSpeed = 0.45;
 
     // Queda activo para el pellizco de dos dedos, que gestiona él. La rueda
@@ -667,8 +670,10 @@ function crearControles(camara, dom, centro, distancia) {
     // Un dedo desplaza —igual que el botón izquierdo—, dos dedos acercan y
     // giran. El shell es de 100dvh y no scrollea, así que el arrastre de un
     // dedo sobre el lienzo no le quita el scroll a nadie.
+    // En táctil no hay hover, así que el parálax no llega: un dedo gira,
+    // que es el equivalente más cercano a mirar el mueble desde un lado.
     if (THREE.TOUCH) {
-        c.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+        c.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
     }
 
     c.update();
@@ -696,6 +701,11 @@ function instalarNavegacion(contenedor, camara, escena, mueble, controles, alCam
     const holgura = caja.getSize(new THREE.Vector3()).multiplyScalar(0.12);
     const minTarget = caja.min.clone().sub(holgura);
     const maxTarget = caja.max.clone().add(holgura);
+
+    // El centro del encuadre inicial. encuadrarEscena() y crearControles()
+    // parten de este mismo punto —la caja del mueble—, así que volver aquí es
+    // literalmente volver al estado de arranque.
+    const centroMueble = caja.getCenter(new THREE.Vector3());
 
     const rayo = new THREE.Raycaster();
     const puntero = new THREE.Vector2();
@@ -746,8 +756,36 @@ function instalarNavegacion(contenedor, camara, escena, mueble, controles, alCam
         const factor = nueva / distancia;
         if (Math.abs(factor - 1) < 0.0005) return;   // ya está en el tope
 
-        camara.position.sub(destino).multiplyScalar(factor).add(destino);
-        controles.target.sub(destino).multiplyScalar(factor).add(destino);
+        if (factor > 1) {
+            // ALEJARSE RECENTRA. Escalar también aquí alrededor del cursor
+            // amplificaba la desviación respecto del centro: te alejabas y el
+            // mueble se iba quedando a un lado, cada vez más descuadrado.
+            //
+            // Así que el zoom out se parte en dos: un dolly puro —la cámara se
+            // retira del target, que no se mueve— y una vuelta del target al
+            // centro del mueble.
+            //
+            // El factor de vuelta es lo que queda de recorrido después del paso
+            // dividido por lo que quedaba antes. Al encadenar muescas el
+            // producto se telescopia y la desviación acaba valiendo
+            // `inicial · (tope − distancia) / (tope − distancia inicial)`: un
+            // desvanecido lineal en la distancia, sin tirones, y exactamente
+            // cero al llegar al tope. Es decir, el encuadre inicial.
+            const quedaba = controles.maxDistance - distancia;
+            const queda = controles.maxDistance - nueva;
+            const vuelta = quedaba > 1e-6 ? Math.max(0, queda / quedaba) : 0;
+
+            camara.position.sub(controles.target).multiplyScalar(factor).add(controles.target);
+
+            previo.copy(controles.target);
+            controles.target.sub(centroMueble).multiplyScalar(vuelta).add(centroMueble);
+            // La cámara acompaña al target el mismo delta: el recentrado es un
+            // desplazamiento del encuadre, no un giro.
+            camara.position.add(salto.subVectors(controles.target, previo));
+        } else {
+            camara.position.sub(destino).multiplyScalar(factor).add(destino);
+            controles.target.sub(destino).multiplyScalar(factor).add(destino);
+        }
 
         limitar();
         controles.update();
@@ -892,7 +930,7 @@ function texturaPared(colorBase) {
 
     // Una direccional no tiene caída, así que sin esto la pared quedaría
     // igual de iluminada arriba que abajo y se leería como un telón.
-    const base = new THREE.Color(colorBase || token('--pared', '#0F1A1E'));
+    const base = new THREE.Color(colorBase || token('--pared', '#13120F'));
     const arriba = base.clone().multiplyScalar(2.1);
     const abajo = base.clone().multiplyScalar(0.55);
 
@@ -939,27 +977,33 @@ function construirHabitacion(escena, mueble, lampara) {
 
     const pared = new THREE.Mesh(
         new THREE.PlaneGeometry(ancho, alto),
-        new THREE.MeshStandardMaterial(acabado({ map: texturaPared(token('--pared', '#0F1A1E')) }))
+        new THREE.MeshStandardMaterial(acabado({ map: texturaPared(token('--pared', '#13120F')) }))
     );
-    pared.position.set(centro.x, centro.y, caja.min.z - 10);
+    const zPared = caja.min.z - 10;
+    pared.position.set(centro.x, centro.y, zPared);
     pared.receiveShadow = true;
     escena.add(pared);
 
     // Un plano horizontal recibe la luz cenital casi de frente, mientras que
     // la pared la recibe rasante: con el mismo color, el suelo sale mucho más
-    // encendido y vuelve a leerse como una repisa clara bajo el mueble. Se
-    // compensa oscureciéndolo aparte, no bajando la luz de toda la escena.
+    // encendido y vuelve a leerse como una repisa clara. Se compensa
+    // oscureciéndolo aparte, no bajando la luz de toda la escena.
     //
-    // Y va bien por debajo de la balda inferior: pegado a ella parecía otra
-    // tabla más.
+    // Su borde trasero ENCAJA con la pared. Antes arrancaba por delante del
+    // mueble y quedaba una rendija entre los dos planos: de cerca no se veía,
+    // pero al alejarse aparecía el canto y la habitación se deshacía en dos
+    // losas sueltas.
+    //
+    // Y el mueble se APOYA en él. Flotaba 42 unidades por encima, que era un
+    // apaño de cuando no tenía patas; ahora las tiene y tienen que tocar algo.
     const suelo = new THREE.Mesh(
         new THREE.PlaneGeometry(ancho, ancho),
         new THREE.MeshStandardMaterial(acabado({
-            color: new THREE.Color(token('--suelo', '#0A1114')).multiplyScalar(0.45)
+            color: new THREE.Color(token('--suelo', '#0B0B0A')).multiplyScalar(0.45)
         }))
     );
     suelo.rotation.x = -Math.PI / 2;
-    suelo.position.set(centro.x, caja.min.y - 42, caja.max.z + tam.z * 0.6);
+    suelo.position.set(centro.x, caja.min.y - 0.4, zPared + ancho / 2);
     suelo.receiveShadow = true;
     escena.add(suelo);
 
@@ -1165,6 +1209,71 @@ function sombraDeContacto(ancho, fondo) {
     return plano;
 }
 
+// Carcasa del mueble: laterales, coronación y patas.
+//
+// Viene del marco que el diseño de Figma dibuja en CSS alrededor de las
+// baldas. Aquí va en 3D y DENTRO del grupo `mueble`, no en la escena, por dos
+// razones que importan:
+//
+//   · gira con el mueble. Un marco en CSS se quedaría quieto mientras el
+//     estante rota por dentro, y eso se ve roto al instante.
+//   · entra en la caja envolvente que miden encuadrarEscena() y los topes del
+//     paneo, que es lo correcto: la carcasa ES el mueble, no decorado.
+//
+// Es además lo que le faltaba al estante para ser un mueble cerrado en vez de
+// una fachada, que era el motivo de limitar el giro a ±30°.
+function construirCarcasa(mueble, ancho, fondo) {
+    const caja = new THREE.Box3().setFromObject(mueble);
+    const tam = caja.getSize(new THREE.Vector3());
+    const centro = caja.getCenter(new THREE.Vector3());
+
+    const GRUESO = 3.2;          // canto de los laterales
+    const VUELO = 2.4;           // cuánto sobresalen coronación y base
+    const altura = tam.y + GRUESO * 2;
+
+    const maderaCanto = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(token('--madera-canto', '#39271B')),
+        roughness: 0.86,
+        metalness: 0.04
+    });
+
+    const maderaTapa = new THREE.MeshStandardMaterial({
+        map: texturaMadera(ancho + GRUESO * 2 + VUELO * 2, fondo + VUELO),
+        roughness: 0.8,
+        metalness: 0.05
+    });
+
+    const pieza = (geo, material, pos) => {
+        const m = new THREE.Mesh(geo, material);
+        m.position.copy(pos);
+        m.castShadow = true;
+        m.receiveShadow = true;
+        mueble.add(m);
+        return m;
+    };
+
+    // Laterales, con un bisel suave como el resto del mueble
+    const lateral = new THREE.RoundedBoxGeometry(GRUESO, altura, fondo, 2, 0.18);
+    const x = ancho / 2 + GRUESO / 2;
+    pieza(lateral, maderaCanto, new THREE.Vector3(centro.x - x, centro.y, 0));
+    pieza(lateral.clone(), maderaCanto, new THREE.Vector3(centro.x + x, centro.y, 0));
+
+    // Coronación y base: sobresalen por delante y por los lados, que es lo que
+    // hace que un mueble parezca carpintería y no una caja.
+    const anchoTapa = ancho + GRUESO * 2 + VUELO * 2;
+    const tapa = new THREE.RoundedBoxGeometry(anchoTapa, 2.6, fondo + VUELO, 2, 0.2);
+    pieza(tapa, maderaTapa, new THREE.Vector3(centro.x, caja.max.y + GRUESO, VUELO / 2));
+    pieza(tapa.clone(), maderaTapa, new THREE.Vector3(centro.x, caja.min.y - GRUESO, VUELO / 2));
+
+    // Patas: dos tacos, no un zócalo corrido. Levantan el mueble del suelo lo
+    // justo para que la sombra pase por debajo.
+    const pata = new THREE.RoundedBoxGeometry(11, 4.5, fondo * 0.7, 2, 0.15);
+    const yPata = caja.min.y - GRUESO - 3.5;
+    const xPata = ancho / 2 - 4;
+    pieza(pata, maderaCanto, new THREE.Vector3(centro.x - xPata, yPata, 0));
+    pieza(pata.clone(), maderaCanto, new THREE.Vector3(centro.x + xPata, yPata, 0));
+}
+
 // ----------------------------------------
 // El muro: una balda por tema
 // ----------------------------------------
@@ -1255,6 +1364,11 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
         grupos.push(grupo);
     });
 
+    // La carcasa se mide sobre las baldas ya colocadas, así que va aquí y
+    // no antes. Entra en el grupo `mueble`: gira con él y cuenta para el
+    // encuadre.
+    construirCarcasa(mueble, ANCHO, FONDO);
+
     escena.add(mueble);
     construirHabitacion(escena, mueble, ctx.lampara);
     ajustarEntorno(escena);
@@ -1285,6 +1399,31 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
     let resaltado = null;
     let girando = false;
     const objetivoZ = new WeakMap();
+
+    // Parálax: el mueble se asoma unos grados hacia donde está el cursor y
+    // vuelve solo al centro. Sustituye al desplazamiento libre del botón
+    // izquierdo, que dejaba perderse.
+    //
+    // Va sobre la CÁMARA y no rotando el mueble, y eso importa: mover la
+    // cámara no cambia ninguna sombra, así que el mapa de sombras congelado
+    // sigue valiendo. Rotando el mueble habría que recalcularlo en cada
+    // fotograma del hover.
+    const PARALAJE = 5.0;
+    const paralajeObjetivo = new THREE.Vector3();
+    const paralajeAplicado = new THREE.Vector3();
+    const ejeX = new THREE.Vector3();
+    const ejeY = new THREE.Vector3();
+    const paso3 = new THREE.Vector3();
+
+    function fijarParalaje(x, y) {
+        // En ejes de la cámara, no del mundo: si el mueble está girado, el
+        // desplazamiento tiene que seguir siendo hacia los lados de quien mira.
+        camara.matrixWorld.extractBasis(ejeX, ejeY, paso3);
+        paralajeObjetivo.set(0, 0, 0)
+            .addScaledVector(ejeX, x * PARALAJE)
+            .addScaledVector(ejeY, y * PARALAJE * 0.55);
+        animar();
+    }
 
     function aCoordenadas(evento) {
         const caja = contenedor.getBoundingClientRect();
@@ -1341,8 +1480,23 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
                 }
             });
 
+            // El parálax se quita antes de update(): si no, los controles lo
+            // leen como parte de la posición, lo absorben en sus esféricas y la
+            // cámara deriva sola hasta quedarse torcida.
+            camara.position.sub(paralajeAplicado);
+
             // update() devuelve true mientras la cámara siga moviéndose.
             const camaraSeMueve = controles ? controles.update() : false;
+
+            paso3.subVectors(paralajeObjetivo, paralajeAplicado);
+            let paralajeSeMueve = false;
+            if (paso3.lengthSq() > 0.0004) {
+                paralajeAplicado.addScaledVector(paso3, 0.10);
+                paralajeSeMueve = true;
+            } else {
+                paralajeAplicado.copy(paralajeObjetivo);
+            }
+            camara.position.add(paralajeAplicado);
 
             // Las sombras están congeladas para que girar salga fluido, pero
             // si se ha movido un LIBRO hay que rehacerlas: su sombra se
@@ -1351,7 +1505,7 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
 
             ctx.renderer.render(escena, camara);
 
-            if (sigue || camaraSeMueve) {
+            if (sigue || camaraSeMueve || paralajeSeMueve) {
                 requestAnimationFrame(paso);
             } else {
                 animando = false;
@@ -1361,15 +1515,18 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
     }
 
     function alMover(e) {
-        // Durante el arrastre no se resalta: serían sesenta raycasts por
-        // segundo y el tooltip iría parpadeando mientras giras.
+        // Durante el giro no se resalta ni se aplica parálax: serían sesenta
+        // raycasts por segundo y dos movimientos peleándose.
         if (girando) return;
         aCoordenadas(e);
+        fijarParalaje(puntero.x, puntero.y);
         resaltar(tocado(), e);
     }
 
     function alSalir() {
+        paralajeObjetivo.set(0, 0, 0);
         resaltar(null);
+        animar();
     }
 
     // Umbral en píxeles, no en tiempo: un arrastre lento y corto sigue siendo
@@ -1518,7 +1675,7 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
     const mueble = new THREE.Group();
 
     const librosMesh = [];
-    const acento = tema?.color || token('--laton', '#C9A227');
+    const acento = tema?.color || token('--laton', '#BF8550');
     let fila = 0;
 
     for (const [subtema, delGrupo] of grupos) {
