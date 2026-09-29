@@ -62,6 +62,33 @@ function token(nombre, respaldo) {
     return valor || respaldo;
 }
 
+// Color para el `color` de un material, convertido de sRGB a LINEAL.
+//
+// Esta función existe porque su ausencia era el defecto más caro de toda la
+// escena, y no se veía como un error de color sino como falta de acabado:
+// todo salía pastel, el canto del mueble más claro que sus propias baldas, la
+// maceta salmón y las hojas verde menta.
+//
+// three r147 corre con ColorManagement.legacyMode: `new THREE.Color('#39271B')`
+// NO convierte nada, mete el hex tal cual como valor lineal, y el renderer le
+// aplica después el gamma de salida. Un nogal oscuro sale así a #6E5A47, que
+// es un tostado claro. Es decir: TODO hex puesto a mano en un material salía
+// entre una y dos paradas más claro y más lavado de lo escrito.
+//
+// El apaño anterior era escribir los tokens ya pre-compensados (--planta-hoja
+// era #081C0C para verse #3E6B4A), lo que obligaba a elevar a 2.2 a mano cada
+// color nuevo y dejaba :root lleno de hexes que no se parecen a lo que pintan.
+// Con esto los tokens vuelven a ser el color de verdad y la conversión ocurre
+// en un solo sitio.
+//
+// OJO, y es la mitad de la regla: esto va SOLO donde el color alimenta a un
+// material. Los colores que acaban dibujados en un <canvas> (la pared, las
+// duelas, el papel) viajan en una textura marcada sRGBEncoding, que el
+// renderer ya decodifica sola: convertirlos aquí los oscurecería dos veces.
+function colorMaterial(nombre, respaldo) {
+    return new THREE.Color(token(nombre, respaldo)).convertSRGBToLinear();
+}
+
 // Hash determinista de un id → 0..1. Determinista es el punto: la altura y
 // el tono de cada libro salen de aquí, y renderizarLibros() reconstruye el
 // mueble en cada cambio. Con Math.random() los libros bailarían al filtrar.
@@ -129,6 +156,11 @@ function colorLomo(libro, acentoHex) {
     const croma = Math.max(0.30, Math.min(0.82, hsl.s + (m - 0.5) * 0.26));
     const factor = CROMA_POR_ESTADO[libro.estado] ?? CROMA_POR_ESTADO['Pendiente'];
 
+    // setHSL da un color en el espacio en el que se lea: se convierte a lineal
+    // como cualquier otro hex de material (ver colorMaterial). Sin esa
+    // conversión el 0.55 de arriba llegaba al material COMO lineal, o sea un
+    // 0.77 en pantalla, y de ahí venía el aire de caramelo de toda la fila:
+    // los lomos no eran tela ni cartoné, eran pastillas de colores.
     return new THREE.Color().setHSL(
         // Tono: ±32° alrededor del acento del tema. Estaba en ±18° y una
         // balda entera salía casi del mismo color; un estante de verdad es
@@ -139,10 +171,10 @@ function colorLomo(libro, acentoHex) {
         // La luminosidad NO cambia con el ESTADO: lo único que separa un libro
         // leído de uno pendiente es el color. Si además variara el brillo, los
         // pendientes se hundirían en el fondo y dejarías de contarlos. Lo que
-        // sí varía es por libro, y el rango subió de 0.13–0.38 a 0.20–0.55:
-        // acotado tan abajo, todo el mueble se veía apagado.
-        Math.max(0.20, Math.min(0.55, hsl.l * 0.86 + (n - 0.5) * 0.22))
-    );
+        // sí varía es por libro. El rango se lee ya como sRGB, que es lo que
+        // parece: 0.30–0.62 es la tapa de tela de un libro bajo una lámpara.
+        Math.max(0.30, Math.min(0.62, hsl.l * 0.92 + (n - 0.5) * 0.24))
+    ).convertSRGBToLinear();
 }
 
 function colorEstado(estado) {
@@ -196,8 +228,30 @@ function texturaTrasera(nombre, cuenta, acentoHex, ancho, alto) {
     const ctx = lienzo.getContext('2d');
     const W = lienzo.width, H = lienzo.height;
 
-    ctx.fillStyle = token('--superficie-honda', '#100C09');
+    // El fondo del mueble es madera, no un agujero. Iba de un gris casi negro
+    // y plano, y el resultado era que cada balda tenía detrás un rectángulo de
+    // vacío: el estante se leía como cinco huecos recortados en la pared en
+    // vez de como un mueble con trasera. Sigue siendo muy oscuro —el rótulo y
+    // los lomos se apoyan encima y tienen que ganar— pero ya tiene veta.
+    const hondo = new THREE.Color(token('--superficie-honda', '#100C09'));
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#' + hondo.clone().multiplyScalar(2.3).getHexString());
+    g.addColorStop(1, '#' + hondo.getHexString());
+    ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(214, 170, 120, 0.05)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 46; i++) {
+        const v = hashEstante('trasera|' + i);
+        const x = v * W;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        for (let y = 0; y <= H; y += 12) {
+            ctx.lineTo(x + Math.sin((y + v * 140) * 0.03) * 1.6, y);
+        }
+        ctx.stroke();
+    }
 
     // Un halo cálido arriba a la izquierda: la misma dirección que la luz de
     // la escena, para que el panel no se lea como un recorte plano.
@@ -235,6 +289,10 @@ function texturaTrasera(nombre, cuenta, acentoHex, ancho, alto) {
 //
 // La cache es de módulo y se vacía en destruir(), lo cual es correcto porque
 // nunca hay dos escenas vivas a la vez (ver la regla del contexto único).
+// Ranuras de textura que destruir() tiene que liberar en cada material.
+const MAPAS_MATERIAL = ['map', 'bumpMap', 'normalMap', 'roughnessMap',
+                        'metalnessMap', 'alphaMap', 'aoMap', 'emissiveMap'];
+
 const CACHE_TEXTURAS = new Map();
 
 function texturaCacheada(clave, fabrica) {
@@ -475,6 +533,10 @@ function crearEscenaEstante(contenedor, opciones) {
         console.warn('[Estante] RoomEnvironment no cargó; el mueble se verá mate.');
     }
 
+    // near y far son provisionales: los fija ajustarProfundidad() cuando ya
+    // existen la escena y los controles, que es cuando se sabe cuanto puede
+    // alejarse la camara y que hay detras. Un far fijo aqui es una bomba de
+    // relojeria - ver esa funcion.
     const camara = new THREE.PerspectiveCamera(38, 1, 0.1, 500);
     camara.position.set(0, 0, 60);
 
@@ -558,7 +620,10 @@ function crearEscenaEstante(contenedor, opciones) {
             if (obj.material) {
                 const materiales = Array.isArray(obj.material) ? obj.material : [obj.material];
                 materiales.forEach(m => {
-                    if (m.map) m.map.dispose();
+                    // No solo `map`: la tarima trae bumpMap, y quien añada un
+                    // material con normal o rugosidad los dejaría colgados en
+                    // la GPU sin que nada avise.
+                    MAPAS_MATERIAL.forEach(k => { if (m[k]) m[k].dispose(); });
                     m.dispose();
                 });
             }
@@ -587,7 +652,8 @@ function crearEscenaEstante(contenedor, opciones) {
         lampara.shadow.needsUpdate = true;
     }
 
-    return { escena, camara, renderer, lampara, pedirRender, redimensionar,
+    return { escena, camara, renderer, lampara, relleno, ambiente,
+             pedirRender, redimensionar,
              registrar, destruir, fijarGanchoResize, congelarSombras };
 }
 
@@ -608,8 +674,15 @@ function crearEscenaEstante(contenedor, opciones) {
 
 const LIMITES_ORBITA = {
     azimut: 0.52,                 // ±30°
-    polarMin: Math.PI * 0.38,     // ±20° alrededor de la horizontal
-    polarMax: Math.PI * 0.62,
+    polarMin: Math.PI * 0.38,     // 20° por encima de la horizontal
+    // Y hasta 36° por debajo, PERO este no suele ser el tope que manda: el
+    // que manda es el suelo. Ver limitarInclinacion() en instalarNavegacion,
+    // que baja este valor según lo lejos que esté la cámara, porque bajar la
+    // vista es bajar la cámara y a cierta distancia eso la mete por debajo de
+    // la tarima. Este número es solo el límite de diseño: cuánto se deja
+    // picar hacia arriba el mueble cuando la cámara está lo bastante cerca
+    // como para hacerlo sin atravesar el suelo.
+    polarMax: Math.PI * 0.70,
     // Fracciones de la distancia encuadrada. 0.22 deja el encuadre en una
     // balda aproximadamente: acercarse a leer los lomos es media razón de
     // que exista el zoom, y con 0.55 te quedabas mirando el mueble entero.
@@ -692,8 +765,9 @@ function crearControles(camara, dom, centro, distancia) {
 // si cámara y target se acercan a ese punto en la misma proporción, el punto
 // se queda clavado en pantalla y la distancia baja. Eso es exactamente lo que
 // significa "acercar ahí".
-function instalarNavegacion(contenedor, camara, escena, mueble, controles, alCambiar) {
-    if (!controles) return { limitar() {}, destruir() {} };
+function instalarNavegacion(contenedor, camara, escena, mueble, controles, alCambiar,
+                            centroVista, yPiso) {
+    if (!controles) return { limitar() {}, pasoZoom() { return false; }, destruir() {} };
 
     // Topes del paneo: la caja del MUEBLE con holgura. Medir la escena daría
     // los límites de la pared, que es enorme, y no sujetarían nada.
@@ -702,10 +776,14 @@ function instalarNavegacion(contenedor, camara, escena, mueble, controles, alCam
     const minTarget = caja.min.clone().sub(holgura);
     const maxTarget = caja.max.clone().add(holgura);
 
-    // El centro del encuadre inicial. encuadrarEscena() y crearControles()
-    // parten de este mismo punto —la caja del mueble—, así que volver aquí es
-    // literalmente volver al estado de arranque.
-    const centroMueble = caja.getCenter(new THREE.Vector3());
+    // El centro del encuadre inicial, al que vuelve el zoom out. Lo pasa quien
+    // monta la escena, porque desde que hay escenografía el encuadre mide más
+    // que el estante: usar aquí el centro del mueble dejaría el reencuadre
+    // desviado justo lo que la planta y la mesa descentran la vista. El
+    // respaldo es la caja del mueble, para el modal, que no lleva decorado.
+    const centroMueble = centroVista
+        ? centroVista.clone()
+        : caja.getCenter(new THREE.Vector3());
 
     const rayo = new THREE.Raycaster();
     const puntero = new THREE.Vector2();
@@ -722,7 +800,96 @@ function instalarNavegacion(contenedor, camara, escena, mueble, controles, alCam
         controles.target.clamp(minTarget, maxTarget);
         salto.subVectors(controles.target, previo);
         if (salto.lengthSq() > 0) camara.position.add(salto);
+        limitarInclinacion();
     }
+
+    // EL SUELO ES EL TOPE DE LA INCLINACIÓN, y tiene que serlo por distancia.
+    //
+    // Inclinar la vista hacia arriba es bajar la cámara: la altura del ojo es
+    // `target.y + distancia · cos(phi)`, así que con phi pasado de 90° el
+    // coseno se vuelve negativo y la cámara baja tanto más cuanto más lejos
+    // esté. Con un tope fijo en grados hay que elegir entre dos males: o se
+    // pone flojo y de cerca apenas se puede picar, o se pone suelto y al
+    // alejarse la cámara acaba por debajo de la tarima. Y por debajo no hay
+    // nada: el suelo es un PlaneGeometry de una cara, así que desde abajo
+    // desaparece y se ve la habitación flotando sobre el vacío.
+    //
+    // Así que el tope no se fija en grados sino en ALTURA, y de ahí sale el
+    // ángulo. De cerca se puede picar mucho; al alejarse, el tope se cierra
+    // solo hacia la horizontal. Es el mismo criterio que limitar() aplica al
+    // paneo: no se prohíbe el gesto, se topa donde dejaría de tener sentido.
+    const ROCE_SUELO = Math.max(1.5, caja.getSize(new THREE.Vector3()).y * 0.02);
+    const esfera = new THREE.Spherical();
+    const desp = new THREE.Vector3();
+
+    function limitarInclinacion() {
+        if (typeof yPiso !== 'number') return;
+
+        desp.subVectors(camara.position, controles.target);
+        const radio = desp.length();
+        if (radio < 1e-6) return;
+
+        // Se busca el phi que deja el ojo justo a ras de tarima:
+        //   yPiso + ROCE = target.y + radio · cos(phi)
+        const coseno = (yPiso + ROCE_SUELO - controles.target.y) / radio;
+        const phiSuelo = Math.acos(Math.min(1, Math.max(-1, coseno)));
+        const tope = Math.min(LIMITES_ORBITA.polarMax, phiSuelo);
+
+        controles.maxPolarAngle = tope;
+        // Si el suelo aprieta más que el tope de picado hacia abajo, el mínimo
+        // tiene que ceder: con min > max OrbitControls se queda atascado.
+        controles.minPolarAngle = Math.min(LIMITES_ORBITA.polarMin, tope);
+
+        // Y si ya se había pasado —típicamente por alejarse con la vista ya
+        // inclinada, que alarga el radio y hunde la cámara sin que el ratón se
+        // mueva—, se sube al tope conservando distancia y azimut. Se toca la
+        // cámara directamente y no con update(), como hace limitar(): esto
+        // corre DENTRO del handler de `change`, y llamar a update() ahí lo
+        // volvería a disparar. OrbitControls recalcula sus esféricas desde
+        // camara.position en cada update(), así que no se le descuadra nada.
+        esfera.setFromVector3(desp);
+        if (esfera.phi > tope) {
+            esfera.phi = tope;
+            desp.setFromSpherical(esfera);
+            camara.position.copy(controles.target).add(desp);
+            // Aquí sí hace falta reorientar: limitar() puede saltarse este paso
+            // porque mueve cámara y target el mismo delta y la dirección no
+            // cambia, pero esto es un giro.
+            camara.lookAt(controles.target);
+        }
+    }
+
+    // ---- zoom suave
+    //
+    // La rueda no mueve la cámara: apunta el factor que queda por aplicar y lo
+    // reparte el bucle de animación en varias rebanadas. Antes cada muesca
+    // aplicaba su 14% de golpe y el acercamiento iba a saltos.
+    //
+    // Se puede trocear así porque las DOS ramas del zoom son escalados
+    // multiplicativos alrededor de un punto —el cursor al acercarse, el target
+    // al alejarse—, y una escala es el producto de sus partes: aplicar el
+    // factor entero o N rebanadas de `factor^(1/N)` lleva exactamente al mismo
+    // sitio. El recentrado del zoom out también sobrevive al troceo, y por la
+    // misma razón que sobrevive a encadenar muescas: su producto telescopia
+    // (ver el comentario largo más abajo).
+    //
+    // `zoomPendiente` es lo que queda por hacer. Se acumula entre muescas, así
+    // que girar rápido no se queda corto, y mezclar direcciones se cancela
+    // solo, que es lo que uno espera.
+    let zoomPendiente = 1;
+    const anclaZoom = new THREE.Vector3();
+
+    // Cuánto del recorrido que queda se hace en cada fotograma, en escala
+    // logarítmica: 0.22 deja el 78% para el siguiente, así que a 60 fps el
+    // grueso del viaje se hace en unos diez fotogramas (~170 ms). Con
+    // movimiento reducido no hay rebanadas: se aplica entero y ya.
+    const SUAVIDAD_ZOOM = sinInercia() ? 1 : 0.22;
+
+    // Tope de acumulación. El rango de distancia es 0.22×–1.25× de la
+    // encuadrada, o sea menos de 6× de punta a punta: guardar más pendiente
+    // que eso solo sirve para que la rueda siga corriendo después de haber
+    // llegado al tope.
+    const ZOOM_MAX_PENDIENTE = 6;
 
     function alRueda(evento) {
         evento.preventDefault();
@@ -740,21 +907,59 @@ function instalarNavegacion(contenedor, camara, escena, mueble, controles, alCam
         // está sobre el vacío, un plano que pasa por el target.
         const golpes = rayo.intersectObjects(escena.children, true);
         if (golpes.length) {
-            destino.copy(golpes[0].point);
+            anclaZoom.copy(golpes[0].point);
         } else {
             camara.getWorldDirection(normal);
             plano.setFromNormalAndCoplanarPoint(normal, controles.target);
-            if (!rayo.ray.intersectPlane(plano, destino)) return;
+            if (!rayo.ray.intersectPlane(plano, anclaZoom)) return;
+        }
+
+        const paso = evento.deltaY < 0 ? 0.86 : 1 / 0.86;
+        zoomPendiente = Math.min(ZOOM_MAX_PENDIENTE,
+                                 Math.max(1 / ZOOM_MAX_PENDIENTE, zoomPendiente * paso));
+        alCambiar?.();
+    }
+
+    // Una rebanada del zoom pendiente. La llama el bucle de animación una vez
+    // por fotograma y devuelve si queda trabajo.
+    //
+    // Que el ancla se guarde y el escalado se aplique sobre la posición ACTUAL
+    // de la cámara es lo que hace que girar mientras el zoom viaja no rompa
+    // nada: cada fotograma escala desde donde esté la cámara en ese momento.
+    // Umbral de convergencia. Parece un detalle y no lo es: lo que quede sin
+    // aplicar al cortar se TIRA, y como cada muesca arranca de la distancia
+    // real, el error no se compensa — se acumula muesca a muesca. A 0.002 eran
+    // dos por mil por gesto, que en veinte muescas ya es un 4% de distancia
+    // perdido. Las últimas rebanadas no se ven, así que sale gratis apretarlo.
+    const ZOOM_EPSILON = 0.0005;
+
+    function pasoZoom() {
+        if (Math.abs(zoomPendiente - 1) < ZOOM_EPSILON) {
+            zoomPendiente = 1;
+            return false;
         }
 
         const distancia = camara.position.distanceTo(controles.target);
-        if (distancia <= 0) return;
+        if (distancia <= 0) { zoomPendiente = 1; return false; }
 
-        const paso = evento.deltaY < 0 ? 0.86 : 1 / 0.86;
-        const nueva = Math.min(Math.max(distancia * paso, controles.minDistance),
+        const trozo = Math.pow(zoomPendiente, SUAVIDAD_ZOOM);
+        const deseada = distancia * trozo;
+        const nueva = Math.min(Math.max(deseada, controles.minDistance),
                                controles.maxDistance);
         const factor = nueva / distancia;
-        if (Math.abs(factor - 1) < 0.0005) return;   // ya está en el tope
+
+        // TOPAR Y CONVERGER SON COSAS DISTINTAS, y confundirlas costaba
+        // precisión: el corte estaba puesto sobre `factor`, que es la rebanada,
+        // y una rebanada es solo el 22% del pendiente en logaritmos — así que
+        // se daba por terminado cuatro veces y media antes de tiempo y tiraba
+        // un 0.2% del recorrido en cada gesto.
+        //
+        // Se mira si el tope ha recortado la rebanada, que es la única razón
+        // de verdad para descartar lo que quede: no tiene a dónde ir.
+        if (nueva !== deseada) zoomPendiente = 1;
+        else zoomPendiente /= trozo;
+
+        if (Math.abs(factor - 1) < 1e-7) return false;   // ya estaba en el tope
 
         if (factor > 1) {
             // ALEJARSE RECENTRA. Escalar también aquí alrededor del cursor
@@ -766,11 +971,13 @@ function instalarNavegacion(contenedor, camara, escena, mueble, controles, alCam
             // centro del mueble.
             //
             // El factor de vuelta es lo que queda de recorrido después del paso
-            // dividido por lo que quedaba antes. Al encadenar muescas el
+            // dividido por lo que quedaba antes. Al encadenar pasos el
             // producto se telescopia y la desviación acaba valiendo
             // `inicial · (tope − distancia) / (tope − distancia inicial)`: un
             // desvanecido lineal en la distancia, sin tirones, y exactamente
-            // cero al llegar al tope. Es decir, el encuadre inicial.
+            // cero al llegar al tope. Es decir, el encuadre inicial. Eso vale
+            // igual para muescas enteras que para las rebanadas de aquí, que
+            // es lo que permite suavizar el zoom sin tocar esta cuenta.
             const quedaba = controles.maxDistance - distancia;
             const queda = controles.maxDistance - nueva;
             const vuelta = quedaba > 1e-6 ? Math.max(0, queda / quedaba) : 0;
@@ -783,13 +990,14 @@ function instalarNavegacion(contenedor, camara, escena, mueble, controles, alCam
             // desplazamiento del encuadre, no un giro.
             camara.position.add(salto.subVectors(controles.target, previo));
         } else {
-            camara.position.sub(destino).multiplyScalar(factor).add(destino);
-            controles.target.sub(destino).multiplyScalar(factor).add(destino);
+            camara.position.sub(anclaZoom).multiplyScalar(factor).add(anclaZoom);
+            controles.target.sub(anclaZoom).multiplyScalar(factor).add(anclaZoom);
         }
 
         limitar();
-        controles.update();
-        alCambiar?.();
+        // El fotograma se pinta igual aunque esto devuelva false: el bucle
+        // renderiza y DESPUÉS mira las banderas.
+        return zoomPendiente !== 1;
     }
 
     // El botón central dispara el autoscroll de Chrome —el widget de las
@@ -806,6 +1014,7 @@ function instalarNavegacion(contenedor, camara, escena, mueble, controles, alCam
 
     return {
         limitar,
+        pasoZoom,
         destruir() {
             contenedor.removeEventListener('wheel', alRueda, { capture: true });
             contenedor.removeEventListener('pointerdown', alBajarCentral, { capture: true });
@@ -889,11 +1098,50 @@ function ajustarEntorno(escena) {
     });
 }
 
+// Plano de recorte lejano, calculado y no fijado a mano.
+//
+// La camara nacia con far = 500. Iba sobrada mientras el encuadre solo media
+// el estante: el tope de alejamiento eran 344 unidades. Al entrar la
+// escenografia en el encuadre, la distancia ajustada subio a 428 y el tope a
+// 535 - por delante del plano de recorte. El resultado no era un error ni un
+// hueco: el mueble, la pared y la mesa sencillamente DESAPARECIAN al llegar al
+// tope del zoom out, como si la escena se borrara.
+//
+// (Las esquinas de la pared ya se recortaban antes de la escenografia, porque
+// girada a 30 grados la esquina visible cae a unas 700 unidades del ojo. Nadie
+// lo vio nunca porque la pared es casi negra sobre fondo negro.)
+//
+// Asi que far sale de lo que hay: el alejamiento maximo que permiten los
+// controles mas el radio de la escena entera. Y de paso sube `near`, que a 0.1
+// desperdiciaba casi todo el buffer de profundidad en un espacio donde nada se
+// acerca a menos de decenas de unidades; el margen que gana es lo que evita
+// que dos lomos pegados empiecen a parpadear uno sobre otro.
+function ajustarProfundidad(camara, controles, escena) {
+    const esfera = cajaDe(escena).getBoundingSphere(new THREE.Sphere());
+    const lejos = controles ? controles.maxDistance
+                            : camara.position.distanceTo(esfera.center);
+
+    camara.far = lejos + esfera.radius * 1.1 + 50;
+    camara.near = controles ? Math.max(0.5, controles.minDistance * 0.04) : 0.1;
+    camara.updateProjectionMatrix();
+}
+
+// Caja envolvente de uno o de varios objetos. Existe porque el encuadre pasó
+// a medir el mueble MÁS la escenografía: sin sumar la planta y la mesa, la
+// cámara encuadra solo el estante y las deja fuera de cuadro.
+function cajaDe(objeto) {
+    const caja = new THREE.Box3();
+    (Array.isArray(objeto) ? objeto : [objeto]).forEach(o => {
+        if (o) caja.expandByObject(o);
+    });
+    return caja;
+}
+
 function encuadrarEscena(camara, objeto, margen) {
-    // OJO: mide el MUEBLE, no la escena. Desde que hay pared y suelo, medir
-    // la escena entera dispararía la caja envolvente y la cámara se iría
+    // OJO: mide el MUEBLE y la escenografía, NUNCA la escena. Pared y suelo
+    // son telón: medirlos dispararía la caja envolvente y la cámara se iría
     // hasta dejar el mueble del tamaño de un sello.
-    const caja = new THREE.Box3().setFromObject(objeto);
+    const caja = cajaDe(objeto);
     if (caja.isEmpty()) return { centro: new THREE.Vector3(), dist: 60 };
 
     const centro = caja.getCenter(new THREE.Vector3());
@@ -922,34 +1170,291 @@ function encuadrarEscena(camara, objeto, margen) {
 // Van a la escena, NO al grupo `mueble`. Quien los meta dentro del mueble
 // romperá el encuadre de cámara y los topes del paneo, que miden esa caja.
 
+// El POZO DE LUZ, que es lo que faltaba para que esto fuera un cuarto.
+//
+// Una luz direccional no tiene caída: ilumina igual el metro de pared que hay
+// detrás del mueble que el que hay a trescientas unidades. Con la pared
+// pintada de un color plano el resultado era un vacío negro uniforme de
+// horizonte a horizonte, y NINGÚN detalle del mueble arregla eso — el ojo lee
+// primero el fondo, y un fondo sin gradiente dice "esto es un render" antes de
+// que dé tiempo a mirar la carpintería.
+//
+// Así que la caída va pintada. La pared mide mil unidades, está centrada en el
+// mueble y no se mide nunca para nada, así que el óvalo cae justo detrás del
+// estante y las esquinas se cierran solas. Cuesta un lienzo y ni una luz más.
+//
+// Se usa dos veces, con distinto tamaño: en la pared y en el suelo (ver
+// penumbraSuelo). Es el mismo fenómeno visto en dos planos.
+function pintarPozo(ctx, W, H, cx, cy, radio, ensanche, calidez, cierre) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(ensanche, 1);
+
+    // El halo cálido: la lámpara devolviendo luz sobre la pared.
+    if (calidez > 0) {
+        const pozo = ctx.createRadialGradient(0, 0, 0, 0, 0, radio);
+        pozo.addColorStop(0, 'rgba(255, 206, 148, ' + calidez.toFixed(3) + ')');
+        pozo.addColorStop(0.42, 'rgba(255, 194, 138, ' + (calidez * 0.34).toFixed(3) + ')');
+        pozo.addColorStop(1, 'rgba(255, 188, 132, 0)');
+        ctx.fillStyle = pozo;
+        ctx.fillRect(-W, -H, W * 2, H * 2);
+    }
+
+    // Y el cierre: fuera del halo cae a negro. Esto es lo que hace que la
+    // habitación TERMINE en algún sitio en vez de seguir hasta el borde del
+    // encuadre con el mismo tono.
+    const sombra = ctx.createRadialGradient(0, 0, radio * 0.34, 0, 0, radio * 1.9);
+    sombra.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    sombra.addColorStop(0.55, 'rgba(0, 0, 0, ' + (cierre * 0.45).toFixed(3) + ')');
+    sombra.addColorStop(1, 'rgba(0, 0, 0, ' + cierre.toFixed(3) + ')');
+    ctx.fillStyle = sombra;
+    ctx.fillRect(-W, -H, W * 2, H * 2);
+    ctx.restore();
+}
+
+// La pared es de PANELES MOLDURADOS, y pasar de un color plano a esto obligó a
+// reorganizar cómo se ilumina, así que conviene entender el porqué.
+//
+// Un plano de mil unidades pintado con UNA textura estirada da, a 512 píxeles,
+// unas dos unidades por téxel: suficiente para un degradado, ridículo para una
+// moldura. Y subir la textura hasta que la moldura sea nítida significa 2048²
+// —16 MB de GPU para el telón de fondo, más que todo el resto de la escena
+// junta— cuando lo único que hay que repetir es un entrepaño.
+//
+// Así que el mosaico vuelve: un entrepaño en 256×512 que se repite, con lo cual
+// cada téxel mide un cuarto de unidad y la moldura sale limpia.
+//
+// El precio es que el POZO DE LUZ ya no cabe aquí. Repetido catorce veces
+// serían catorce pozos. Se muda a su propio plano —velo(), delante de la
+// pared—, que es exactamente el mismo recurso que penumbraSuelo() y que
+// sombraDeContacto(). Y el halo cálido que llevaba se elimina del todo: cuando
+// se pintó no había lámpara en la escena. Ahora la hay, y da un pozo de luz de
+// verdad, con su caída y su color, que es mejor que cualquier cosa pintada.
+//
+// La luz de las molduras está HORNEADA (canto superior e izquierdo claros,
+// inferior y derecho oscuros) y eso es correcto, no un atajo: la pared no se
+// mueve, la clave no se mueve y viene de arriba a la izquierda. Quien cambie la
+// dirección de la lámpara tiene que venir aquí a darle la vuelta.
 function texturaPared(colorBase) {
+    const W = 256, H = 512;
     const lienzo = document.createElement('canvas');
-    lienzo.width = 32;
-    lienzo.height = 256;
+    lienzo.width = W;
+    lienzo.height = H;
     const ctx = lienzo.getContext('2d');
 
-    // Una direccional no tiene caída, así que sin esto la pared quedaría
-    // igual de iluminada arriba que abajo y se leería como un telón.
     const base = new THREE.Color(colorBase || token('--pared', '#13120F'));
-    const arriba = base.clone().multiplyScalar(2.1);
-    const abajo = base.clone().multiplyScalar(0.55);
+    const tono = k => '#' + base.clone().multiplyScalar(k).getHexString();
 
-    const g = ctx.createLinearGradient(0, 0, 0, 256);
-    g.addColorStop(0, '#' + arriba.getHexString());
-    g.addColorStop(0.55, '#' + base.getHexString());
-    g.addColorStop(1, '#' + abajo.getHexString());
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 32, 256);
+    ctx.fillStyle = tono(0.88);
+    ctx.fillRect(0, 0, W, H);
+
+    // Grano de yeso sobre el fondo, con el mismo repertorio de dos escalas que
+    // el relieve. Aquí en color y muy tenue: solo para que el entrepaño no sea
+    // un valor constante.
+    for (let i = 0; i < 300; i++) {
+        const a = hashEstante('parGrano|' + i);
+        const b = hashEstante('parGrano|b|' + i);
+        ctx.fillStyle = a > 0.5 ? 'rgba(255,240,220,0.022)' : 'rgba(0,0,0,0.03)';
+        ctx.fillRect(a * W, b * H, 3 + a * 26, 2 + b * 5);
+    }
+
+    // El entrepaño: un rectángulo hundido con su moldura alrededor. Se dibuja
+    // como cuatro biseles, no como un marco de una pieza, porque lo que hace
+    // que una moldura se lea es que sus cuatro cantos NO sean iguales.
+    const MX = W * 0.14, MY = H * 0.085;
+    const x0 = MX, y0 = MY, x1 = W - MX, y1 = H - MY;
+    const g = 5;                                  // ancho del bisel
+
+    ctx.fillStyle = tono(0.66);                   // el fondo del entrepaño, hundido
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+
+    ctx.fillStyle = tono(0.30);                   // canto de arriba: en sombra
+    ctx.fillRect(x0 - g, y0 - g, x1 - x0 + g * 2, g);
+    ctx.fillStyle = tono(0.40);                   // izquierda: casi rasante
+    ctx.fillRect(x0 - g, y0 - g, g, y1 - y0 + g * 2);
+    ctx.fillStyle = tono(1.45);                   // abajo: de cara a la luz
+    ctx.fillRect(x0 - g, y1, x1 - x0 + g * 2, g);
+    ctx.fillStyle = tono(1.25);                   // derecha
+    ctx.fillRect(x1, y0 - g, g, y1 - y0 + g * 2);
+
+    // Y un filete fino por dentro, que es lo que separa una moldura de un
+    // escalón. Media unidad de ancho en el mundo.
+    ctx.strokeStyle = tono(1.05);
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x0 + g * 1.2, y0 + g * 1.2,
+                   x1 - x0 - g * 2.4, y1 - y0 - g * 2.4);
 
     const tex = new THREE.CanvasTexture(lienzo);
     tex.encoding = THREE.sRGBEncoding;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = ANISOTROPIA;
     return tex;
 }
 
-function construirHabitacion(escena, mueble, lampara) {
+// El velo: el pozo de luz y el cierre a negro, en un plano transparente por
+// delante de la pared. Antes iban pintados dentro de la textura de la pared;
+// salieron de ahí cuando la pared pasó a repetirse en mosaico, porque una
+// viñeta repetida catorce veces son catorce viñetas. Es el mismo recurso que
+// penumbraSuelo(), y por el mismo motivo.
+function veloPared(ancho, alto) {
+    const clave = 'velo-pared|' + Math.round(ancho) + 'x' + Math.round(alto);
+    const tex = texturaCacheada(clave, () => {
+        const L = 512;
+        const lienzo = document.createElement('canvas');
+        lienzo.width = L;
+        lienzo.height = L;
+        const ctx = lienzo.getContext('2d');
+        ctx.clearRect(0, 0, L, L);
+        // Sin calidez: la da la lámpara, que ahora es una luz de verdad.
+        pintarPozo(ctx, L, L, L * 0.46, L * 0.34, L * 0.30, 1.5, 0, 0.96);
+        const t = new THREE.CanvasTexture(lienzo);
+        t.anisotropy = ANISOTROPIA;
+        return t;
+    });
+
+    return new THREE.Mesh(
+        new THREE.PlaneGeometry(ancho, alto),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+    );
+}
+
+// Grano de yeso. Va de bumpMap y no de map, por una razón de escala: el mapa
+// de color se estira una sola vez sobre mil unidades de pared, así que
+// cualquier detalle fino pintado ahí saldría del tamaño de una mesa. El
+// relieve sí puede ir en mosaico, porque el grano no tiene dibujo que delate
+// la repetición.
+//
+// Lo que aporta no es verse: es que la pared deje de ser un valor constante y
+// el rasante de la lámpara la recorra. Una pared perfectamente lisa no existe.
+function texturaGranoPared() {
+    return texturaCacheada('pared-grano', () => {
+        const L = 128;
+        const lienzo = document.createElement('canvas');
+        lienzo.width = L;
+        lienzo.height = L;
+        const ctx = lienzo.getContext('2d');
+
+        ctx.fillStyle = '#808080';
+        ctx.fillRect(0, 0, L, L);
+
+        // Dos escalas y nada más: llaneado —manchas largas y tendidas, como
+        // pasa una espátula— y picado.
+        //
+        // La primera versión llevaba encima un ruido por píxel, y estaba mal
+        // por los dos lados. Costaba 12 ms de getImageData/putImageData sobre
+        // 256², y esto se reconstruye en CADA montaje, o sea en cada pulsación
+        // de tecla del buscador, porque renderizarLibros() desmonta y vuelve a
+        // montar. Y además no se veía: con el mosaico repitiendo 22 veces
+        // sobre mil unidades de pared, un texel caía por debajo del píxel de
+        // pantalla. Eran doce milisegundos por fotograma de ruido invisible.
+        //
+        // El mosaico ahora repite mucho menos (8×6), que es lo que pone el
+        // grano al tamaño en que se ve, y todo se dibuja con el canvas 2D.
+        const mancha = (n, largoMin, largoVar, altoVar, alfa) => {
+            for (let i = 0; i < n; i++) {
+                const h = hashEstante('yeso|' + n + '|' + i);
+                const k = hashEstante('yeso|b|' + n + '|' + i);
+                ctx.save();
+                ctx.translate(h * L, k * L);
+                ctx.rotate((k - 0.5) * 0.8);
+                ctx.fillStyle = h > 0.5
+                    ? 'rgba(255, 255, 255, ' + alfa + ')'
+                    : 'rgba(0, 0, 0, ' + alfa + ')';
+                ctx.fillRect(0, 0, largoMin + h * largoVar, 1 + k * altoVar);
+                ctx.restore();
+            }
+        };
+
+        mancha(70, 14, 44, 7, 0.07);    // llaneado
+        mancha(420, 1, 3, 2, 0.10);     // picado
+
+        const tex = new THREE.CanvasTexture(lienzo);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(8, 6);
+        tex.anisotropy = ANISOTROPIA;
+        return tex;
+    });
+}
+
+// Máscara horizontal para las piezas largas del decorado: blanca en el centro
+// y negra en los extremos. Va de `map`, que MULTIPLICA al color, así que los
+// extremos se apagan solos.
+//
+// Existe por el rodapié: es un listón de mil unidades bajo una luz sin caída,
+// o sea una raya clara que cruzaría el encuadre de lado a lado por muy oscura
+// que fuese. Con esto se desvanece a la vez que la pared que tiene detrás.
+function texturaDesvanecida() {
+    return texturaCacheada('desvanecido', () => {
+        const lienzo = document.createElement('canvas');
+        lienzo.width = 512;
+        lienzo.height = 4;
+        const ctx = lienzo.getContext('2d');
+        const g = ctx.createLinearGradient(0, 0, 512, 0);
+        g.addColorStop(0, '#000000');
+        g.addColorStop(0.32, '#242424');
+        g.addColorStop(0.5, '#ffffff');
+        g.addColorStop(0.68, '#242424');
+        g.addColorStop(1, '#000000');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 512, 4);
+
+        const tex = new THREE.CanvasTexture(lienzo);
+        tex.encoding = THREE.sRGBEncoding;
+        return tex;
+    });
+}
+
+// Penumbra del suelo: el mismo pozo de luz de la pared, tumbado.
+//
+// No se puede pintar dentro de la tarima porque esa textura va en mosaico
+// —repite 26 veces— y una viñeta repetida 26 veces son 26 viñetas. Así que va
+// en un plano aparte, justo encima, con el centro transparente: el mismo
+// recurso que sombraDeContacto() usa bajo cada fila de libros.
+//
+// El plano calca tamaño y sitio del suelo para que no haya un canto donde la
+// penumbra se acabe. Y como el suelo arranca en la pared y se extiende HACIA
+// el espectador, el claro no va en el centro del lienzo sino pegado al borde
+// de atrás, que es donde está el mueble: con rotation.x = -90° la v=1 del
+// plano cae sobre la pared y la v=0 queda detrás de la cámara.
+function penumbraSuelo(lado, vDelMueble) {
+    const clave = 'penumbra-suelo|' + Math.round(vDelMueble * 1000);
+    const tex = texturaCacheada(clave, () => {
+        const L = 1024;
+        const lienzo = document.createElement('canvas');
+        lienzo.width = L;
+        lienzo.height = L;
+        const ctx = lienzo.getContext('2d');
+        ctx.clearRect(0, 0, L, L);
+        // El lienzo se lee con la v hacia arriba, así que el borde de la pared
+        // (v=1) es y=0 en píxeles.
+        pintarPozo(ctx, L, L, L * 0.5, L * (1 - vDelMueble), L * 0.12, 2.1, 0, 0.94);
+        const t = new THREE.CanvasTexture(lienzo);
+        t.anisotropy = ANISOTROPIA;
+        return t;
+    });
+
+    const plano = new THREE.Mesh(
+        new THREE.PlaneGeometry(lado, lado),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+    );
+    plano.rotation.x = -Math.PI / 2;
+    plano.renderOrder = 1;
+    return plano;
+}
+
+function construirHabitacion(escena, mueble, lampara, escenografia) {
     const caja = new THREE.Box3().setFromObject(mueble);
     const tam = caja.getSize(new THREE.Vector3());
     const centro = caja.getCenter(new THREE.Vector3());
+
+    // Lo que la cámara llega a encuadrar: mueble más escenografía. La pared y
+    // el frustum de sombra se dimensionan sobre ESTO y no sobre el estante
+    // solo, porque al sumar la planta y la mesa el encuadre se aleja y lo que
+    // antes sobraba deja de sobrar.
+    const tamVista = cajaDe(escenografia ? [mueble, escenografia] : mueble)
+        .getSize(new THREE.Vector3());
 
     // La pared va a todo lo ancho. El caso exigente no es el encuadre inicial
     // sino el peor: cámara al máximo alejamiento (1.6× la distancia
@@ -960,7 +1465,7 @@ function construirHabitacion(escena, mueble, lampara) {
     // Con 7× el ancho del mueble la semianchura era 260 y asomaba el negro.
     // Un plano son dos triángulos, así que pasarse no cuesta nada y quedarse
     // corto se ve al instante.
-    const ancho = Math.max(tam.x * 14, 1000);
+    const ancho = Math.max(tamVista.x * 8, tam.x * 14, 1000);
     const alto = Math.max(tam.y * 5, 750);
 
     // Se comparte entre pared y suelo: los dos enmarcan y ninguno compite con
@@ -975,14 +1480,35 @@ function construirHabitacion(escena, mueble, lampara) {
         userData: { entornoFijo: true }
     }, extra);
 
+    // Cuántos entrepaños entran. Se fija por ANCHO DE MUNDO, no por un número
+    // de repeticiones: el plano crece con la escenografía, y un recuento fijo
+    // haría que los paneles se estiraran cada vez que se añade algo a la
+    // escena. Un entrepaño de unas 68 unidades es aproximadamente el ancho del
+    // mueble, que es la escala a la que la pared acompaña en vez de competir.
+    const ANCHO_PANEL = 54;
+    const mapaPared = texturaPared(token('--pared', '#13120F'));
+    mapaPared.repeat.set(Math.max(2, Math.round(ancho / ANCHO_PANEL)),
+                         Math.max(1, Math.round(alto / (ANCHO_PANEL * 2.2))));
+
     const pared = new THREE.Mesh(
         new THREE.PlaneGeometry(ancho, alto),
-        new THREE.MeshStandardMaterial(acabado({ map: texturaPared(token('--pared', '#13120F')) }))
+        new THREE.MeshStandardMaterial(acabado({
+            map: mapaPared,
+            bumpMap: texturaGranoPared(),
+            bumpScale: 0.7
+        }))
     );
     const zPared = caja.min.z - 10;
     pared.position.set(centro.x, centro.y, zPared);
     pared.receiveShadow = true;
     escena.add(pared);
+
+    // El velo, medio paso por delante: apaga la pared hacia las esquinas para
+    // que la habitación termine en algún sitio.
+    const velo = veloPared(ancho, alto);
+    velo.position.set(centro.x, centro.y, zPared + 0.5);
+    velo.renderOrder = 1;
+    escena.add(velo);
 
     // Un plano horizontal recibe la luz cenital casi de frente, mientras que
     // la pared la recibe rasante: con el mismo color, el suelo sale mucho más
@@ -996,22 +1522,75 @@ function construirHabitacion(escena, mueble, lampara) {
     //
     // Y el mueble se APOYA en él. Flotaba 42 unidades por encima, que era un
     // apaño de cuando no tenía patas; ahora las tiene y tienen que tocar algo.
+    //
+    // Y es tarima, no un plano de color: duelas a matajunta con veta, nudos y
+    // la junta hundida por bumpMap. El plano liso delataba la escena entera
+    // —el mueble estaba trabajado y se apoyaba sobre nada.
+    const mapasSuelo = texturasSuelo();
     const suelo = new THREE.Mesh(
         new THREE.PlaneGeometry(ancho, ancho),
         new THREE.MeshStandardMaterial(acabado({
-            color: new THREE.Color(token('--suelo', '#0B0B0A')).multiplyScalar(0.45)
+            map: mapasSuelo.color,
+            bumpMap: mapasSuelo.relieve,
+            bumpScale: 0.6,
+            // El `map` ya trae el color de la madera; esto solo lo baja. Un
+            // plano horizontal recibe la clave casi de frente, y a pleno color
+            // la tarima se enciende más que el mueble que sostiene.
+            color: new THREE.Color(0xFFD7B0).multiplyScalar(0.34),
+            // Un suelo de verdad tiene brillo, y es la mitad de lo que lo hace
+            // parecer un suelo: refleja la lámpara en vez de tragársela. Por
+            // eso se salta el 0.94 mate de `acabado` y sube el entorno.
+            roughness: 0.56,
+            envMapIntensity: 0.38
         }))
     );
     suelo.rotation.x = -Math.PI / 2;
-    suelo.position.set(centro.x, caja.min.y - 0.4, zPared + ancho / 2);
+    const yPiso = caja.min.y - 0.4;
+    suelo.position.set(centro.x, yPiso, zPared + ancho / 2);
     suelo.receiveShadow = true;
     escena.add(suelo);
+
+    // La penumbra del suelo, calcada al suelo. El mueble se apoya a unas
+    // pocas unidades de la pared sobre un plano de mil, así que en coordenadas
+    // del plano el claro va casi pegado al borde de atrás.
+    const penumbra = penumbraSuelo(ancho, 1 - (tam.z + 14) / ancho);
+    penumbra.position.set(centro.x, yPiso + 0.08, zPared + ancho / 2);
+    escena.add(penumbra);
+
+    // RODAPIÉ. Es la pieza más barata de toda la habitación y la que más
+    // hace, porque sin ella pared y suelo se cortan en una recta perfecta que
+    // no existe en ningún cuarto: el encuentro se lee como el canto de dos
+    // cartulinas apoyadas. Con un listón delante, los dos planos dejan de ser
+    // planos y pasan a ser paramentos.
+    //
+    // Va a la escena, como la pared y el suelo: es telón, no mueble, y nadie
+    // lo mide. Y lleva la máscara de desvanecido porque mide lo que la pared:
+    // sin ella sería una raya clara cruzando el encuadre de lado a lado.
+    const ALTO_RODAPIE = 7.5;
+    const rodapie = new THREE.Mesh(
+        new THREE.BoxGeometry(ancho, ALTO_RODAPIE, 1.8),
+        new THREE.MeshStandardMaterial({
+            color: colorMaterial('--madera-canto', '#39271B'),
+            map: texturaDesvanecida(),
+            roughness: 0.7,
+            metalness: 0.03,
+            envMapIntensity: 0.16,
+            userData: { entornoFijo: true }
+        })
+    );
+    rodapie.position.set(centro.x, yPiso + ALTO_RODAPIE / 2, zPared + 0.9);
+    rodapie.castShadow = true;
+    rodapie.receiveShadow = true;
+    escena.add(rodapie);
 
     // El frustum de sombra tiene que abarcar el mueble MÁS la pared y el suelo.
     // Si se queda corto, la sombra aparece cortada por una recta a media pared,
     // que es peor que no tener sombra. No se escala con `ancho`, que ahora es
     // enorme: basta con cubrir el mueble y su sombra proyectada.
-    const alcance = Math.max(tam.x, tam.y) * 0.75 + 45;
+    // Sobre la VISTA, no sobre el mueble: si la planta no cabe en el frustum
+    // no proyecta sombra, y un objeto sin sombra junto a otro que sí la tiene
+    // se ve pegado encima, no puesto en el suelo.
+    const alcance = Math.max(tamVista.x, tam.y) * 0.62 + 45;
     lampara.shadow.camera.left = -alcance;
     lampara.shadow.camera.right = alcance;
     lampara.shadow.camera.top = alcance;
@@ -1023,6 +1602,13 @@ function construirHabitacion(escena, mueble, lampara) {
     // baldas el mueble baja bastante por debajo de él.
     lampara.target.position.copy(centro);
     escena.add(lampara.target);
+
+    // La cota del suelo sale de aquí porque es aquí donde se decide. La
+    // necesita el tope de inclinación de la órbita: sin ella, inclinar la
+    // vista hacia abajo acaba metiendo la cámara por debajo de la tarima, y
+    // como el suelo es un plano de una sola cara, desde abajo no existe — se
+    // ve la habitación desde dentro del forjado.
+    return { yPiso, zPared };
 }
 
 // Degradado que finge que el lomo es curvo: oscuro en los cantos, claro hacia
@@ -1232,7 +1818,7 @@ function construirCarcasa(mueble, ancho, fondo) {
     const altura = tam.y + GRUESO * 2;
 
     const maderaCanto = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(token('--madera-canto', '#39271B')),
+        color: colorMaterial('--madera-canto', '#39271B'),
         roughness: 0.86,
         metalness: 0.04
     });
@@ -1278,6 +1864,930 @@ function construirCarcasa(mueble, ancho, fondo) {
 // El muro: una balda por tema
 // ----------------------------------------
 
+// ----------------------------------------
+// Escenografía: los muebles que no son el estante
+// ----------------------------------------
+// Una planta grande y una mesa auxiliar, para que el estante esté en una
+// habitación y no sobre un fondo.
+//
+// La regla de reparto de la escena tiene ahora tres alturas, y conviene
+// entenderla antes de añadir nada:
+//
+//   · `mueble`        el estante. Es de lo que va la app: fija los topes del
+//                     zoom y es lo que el encuadre tiene que garantizar.
+//   · `escenografia`  planta y mesa. Objetos con sitio y tamaño reales, así
+//                     que SÍ entran en el encuadre de la cámara: si no, caen
+//                     fuera del cuadro inicial y no se ven. Lo que no hacen
+//                     es mandar en nada más.
+//   · la escena       pared y suelo. Telón: no se miden NUNCA. Medirlos
+//                     mandaría la cámara a mil unidades con el mueble del
+//                     tamaño de un sello.
+//
+// Quien añada un mueble nuevo lo cuelga de `escenografia`. Quien añada un
+// fondo lo cuelga de la escena.
+
+// Cuántas veces se repite el mosaico de duelas a lo largo del suelo. El plano
+// mide más de mil unidades: con una sola copia cada duela mediría dos metros
+// y se leería como una moqueta estampada.
+const REPETICION_SUELO = 26;
+
+// Una duela: color base con su propio tono, veta longitudinal y un reflejo
+// suave a lo largo. El tono lo decide el hash de su índice, no Math.random:
+// la textura se reconstruye en cada montaje y un suelo que cambia de dibujo
+// al filtrar se nota.
+function dibujarDuela(ctx, x, y, largo, alto, base, semilla) {
+    const h = hashEstante('duela|' + semilla);
+    const tono = base.clone().multiplyScalar(0.74 + h * 0.5);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x + 1.5, y + 1.5, largo - 3, alto - 3);
+    ctx.clip();
+
+    ctx.fillStyle = '#' + tono.getHexString();
+    ctx.fillRect(x, y, largo, alto);
+
+    // Veta: arcos largos y muy tendidos. En un suelo la veta va en el sentido
+    // de la duela, y es lo que impide que cada tabla sea un rectángulo plano.
+    ctx.lineWidth = 1;
+    const vetas = 7;
+    for (let i = 0; i < vetas; i++) {
+        const g = hashEstante('veta|' + semilla + '|' + i);
+        const yv = y + ((i + g) / vetas) * alto;
+        const amplitud = 1.2 + g * 3.4;
+        ctx.strokeStyle = g > 0.5
+            ? 'rgba(0, 0, 0, ' + (0.10 + g * 0.16).toFixed(3) + ')'
+            : 'rgba(255, 228, 196, ' + (0.03 + g * 0.05).toFixed(3) + ')';
+        ctx.beginPath();
+        ctx.moveTo(x, yv);
+        for (let px = 0; px <= largo; px += 24) {
+            ctx.lineTo(x + px, yv + Math.sin((px + semilla * 53) * 0.004 + i) * amplitud);
+        }
+        ctx.stroke();
+    }
+
+    // Nudos: dos o tres por duela, no en todas. Son lo que delata que es
+    // madera y no un laminado impreso.
+    if (h > 0.45) {
+        const nx = x + largo * (0.2 + h * 0.6);
+        const ny = y + alto * (0.3 + hashEstante('nudo|' + semilla) * 0.4);
+        for (let a = 0; a < 4; a++) {
+            ctx.strokeStyle = 'rgba(0, 0, 0, ' + (0.20 - a * 0.04).toFixed(3) + ')';
+            ctx.beginPath();
+            ctx.ellipse(nx, ny, 2.5 + a * 2.6, 1.1 + a * 1.0, 0, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    }
+
+    // Bisel: el canto superior de cada duela coge algo de luz y el inferior
+    // cae. Es medio píxel de dibujo y es lo que da el relieve de tarima.
+    ctx.fillStyle = 'rgba(255, 225, 185, 0.045)';
+    ctx.fillRect(x, y + 1, largo, 1);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.34)';
+    ctx.fillRect(x, y + alto - 2, largo, 1.5);
+
+    ctx.restore();
+}
+
+// Mosaico de tarima a matajunta. Devuelve color y relieve: el relieve es el
+// mismo dibujo en gris y va de `bumpMap`, que es lo que hace que la junta
+// entre duelas se hunda de verdad en vez de ser una raya pintada.
+function texturasSuelo() {
+    const construir = enRelieve => {
+        const L = 1024;
+        const lienzo = document.createElement('canvas');
+        lienzo.width = L;
+        lienzo.height = L;
+        const ctx = lienzo.getContext('2d');
+
+        const tabla = new THREE.Color(token('--suelo-tabla', '#3B2A1C'));
+        ctx.fillStyle = enRelieve ? '#000000' : token('--suelo-junta', '#140D08');
+        ctx.fillRect(0, 0, L, L);
+
+        // La proporción es lo que distingue una tarima de un solado. Con
+        // duelas de 2.5:1 —cinco filas y dos por fila— el suelo salía
+        // embaldosado; una duela real ronda el 9:1, así que va una por fila y
+        // nueve filas.
+        const FILAS = 9;
+        const alto = L / FILAS;
+        const LARGO = L;
+
+        for (let f = 0; f < FILAS; f++) {
+            // Aparejo a matajunta: media duela de desfase en filas alternas.
+            // Con todas las juntas alineadas el suelo se lee como una rejilla.
+            const desfase = (f % 2) * (LARGO / 2);
+            for (let t = -1; t <= 1; t++) {
+                dibujarDuela(ctx, desfase + t * LARGO, f * alto, LARGO, alto,
+                             enRelieve ? new THREE.Color(0x9a9a9a) : tabla,
+                             f * 11 + t + 3);
+            }
+        }
+
+        const tex = new THREE.CanvasTexture(lienzo);
+        if (!enRelieve) tex.encoding = THREE.sRGBEncoding;
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(REPETICION_SUELO, REPETICION_SUELO);
+        // Las duelas corren HACIA el espectador, no de lado a lado. No es un
+        // capricho: tumbadas en el sentido de la vista sus juntas son rectas
+        // horizontales paralelas al borde del encuadre, que es exactamente el
+        // dibujo de un solado. Giradas un cuarto de vuelta esas mismas juntas
+        // se vuelven líneas que convergen en fuga, y la perspectiva del suelo
+        // es la mitad de la profundidad de la escena.
+        tex.center.set(0.5, 0.5);
+        tex.rotation = Math.PI / 2;
+        tex.anisotropy = ANISOTROPIA;
+        return tex;
+    };
+
+    return {
+        color: texturaCacheada('suelo-color', () => construir(false)),
+        relieve: texturaCacheada('suelo-relieve', () => construir(true))
+    };
+}
+
+// ----------------------------------------
+// La planta
+// ----------------------------------------
+// Un ficus lyrata: tronco leñoso desnudo y unas pocas hojas enormes y enteras.
+//
+// Antes era una monstera, y no funcionaba. La razón es instructiva y vale para
+// cualquier cosa que se modele aquí: la identidad de una monstera está en la
+// FILIGRANA — gajos profundos, calados, un contorno muy recortado. Y a la
+// distancia a la que se ve esta planta, la filigrana no se lee como filigrana;
+// se lee como un borde sucio. Se intentó dos veces, cada vez con una forma más
+// correcta botánicamente, y las dos veces salió un recorte de cartulina.
+//
+// El ficus lyrata va en la dirección contraria y por eso sale bien: su silueta
+// son pocas palas grandes y LISAS sobre un tronco pelado. No hay detalle fino
+// que perder a distancia, porque no hay detalle fino. Y el contraste entre el
+// tronco desnudo y la copa ancha es legible en cualquier tamaño, que es lo que
+// se le pide a un objeto de fondo.
+//
+// La regla, para la próxima: a esta escala elige una planta por su MASA y su
+// contorno general, nunca por el detalle de su hoja. Una palmera o un helecho
+// —decenas de folíolos pequeños— fallarían por lo mismo que falló la monstera,
+// y encima costando mucha más geometría.
+
+// Perfil de la hoja, en el plano XY: +X va del pecíolo a la punta.
+//
+// Es una hoja OBOVADA con una insinuación de cintura: ancha pasada la mitad,
+// roma en la punta y algo acorazonada en la base. Los dos extremos tienen que
+// quedar romos — una punta de lanza la devuelve al montón de hojas genéricas.
+//
+// Lo importante aquí es lo que NO se hace. El nombre de la planta invita a
+// modelar un violín, y ese fue el primer intento: dos lóbulos gaussianos
+// sumados, con la cintura naciendo en el valle entre ellos. Con la cintura lo
+// bastante marcada como para verse, la hoja deja de leerse como una hoja y
+// pasa a leerse como dos lóbulos pegados — sale un roble. La cintura de un
+// ficus lyrata es una insinuación: aquí es un 11% sobre una sola campana.
+function formaHojaFicus(largo, ancho, semilla) {
+    const forma = new THREE.Shape();
+    const N = 84;
+    const s = hashEstante('ficus|' + semilla);
+
+    const perfil = t => {
+        // OBOVADA: una sola campana con el máximo pasada la mitad (t≈0.59) y
+        // los dos extremos romos. El exponente 1.3 de dentro es lo que corre
+        // el máximo hacia el ápice; el 0.55 de fuera es lo que achata la punta.
+        const campana = Math.pow(Math.sin(Math.PI * Math.pow(t, 1.3)), 0.55);
+        // Y la cintura del violín, muy suave. Se intentó primero con dos
+        // gaussianas sumadas —un lóbulo en la base y una pala en el ápice— y
+        // salía tan marcada que la hoja se leía como DOS lóbulos pegados: una
+        // hoja de roble, no un ficus. La cintura de esta hoja es una
+        // insinuación, no una escotadura.
+        const cintura = 1 - 0.11 * Math.exp(-Math.pow((t - 0.38) / 0.15, 2));
+        return campana * cintura;
+    };
+
+    // Margen ondulado. Es la otra firma de esta hoja y no es adorno: un
+    // contorno liso sobre una pala tan grande la deja plana como una paleta de
+    // ping-pong. Las dos mitades van desfasadas, por lo de siempre — una hoja
+    // simétrica se lee como troquel.
+    //
+    // La onda se APAGA en los extremos. Sin ese factor, un seno cayendo cerca
+    // de t=1 muerde la punta y la deja dentada, que fue exactamente cómo estas
+    // hojas pasaron de parecer ficus a parecer arce.
+    const borde = (t, lado) => {
+        const fase = s * 6.283 + (lado > 0 ? 0 : 1.15);
+        const onda = 0.035 * Math.sin(t * Math.PI * 3.0 + fase) * Math.sin(Math.PI * t);
+        return ancho * perfil(t) * (1 + onda);
+    };
+
+    forma.moveTo(0, 0);
+    for (let i = 1; i <= N; i++) forma.lineTo((i / N) * largo, borde(i / N, 1));
+    for (let i = N; i >= 0; i--) forma.lineTo((i / N) * largo, -borde(i / N, -1));
+    forma.closePath();
+
+    // Sin calados: un ficus lyrata no los tiene, y es medio motivo del cambio.
+    return forma;
+}
+
+// Subdivisión por puntos medios: cada triángulo en cuatro, `veces` veces.
+//
+// Hace falta porque ShapeGeometry NO tesela el interior: triangula el
+// polígono con los vértices del contorno y nada más, así que el centro de la
+// hoja son cuatro triángulos enormes. Da igual lo fina que sea la curvatura
+// que se les aplique después — con tres vértices por triángulo, el sombreado
+// se interpola en línea recta a lo ancho de media hoja y lo que se ve son
+// facetas. La hoja parecía papel de origami.
+//
+// Va ANTES de desplazar los vértices: subdividir una malla ya curvada solo
+// parte las facetas que ya existen, no las quita.
+function subdividirMalla(geo, veces) {
+    let pos = Array.from(geo.attributes.position.array);
+    let uv = Array.from(geo.attributes.uv.array);
+    let idx = Array.from(geo.index.array);
+
+    for (let v = 0; v < veces; v++) {
+        const salida = [];
+        const cache = new Map();
+        const medio = (a, b) => {
+            const clave = a < b ? a + ':' + b : b + ':' + a;
+            let m = cache.get(clave);
+            if (m === undefined) {
+                m = pos.length / 3;
+                pos.push((pos[a * 3] + pos[b * 3]) / 2,
+                         (pos[a * 3 + 1] + pos[b * 3 + 1]) / 2,
+                         (pos[a * 3 + 2] + pos[b * 3 + 2]) / 2);
+                uv.push((uv[a * 2] + uv[b * 2]) / 2,
+                        (uv[a * 2 + 1] + uv[b * 2 + 1]) / 2);
+                cache.set(clave, m);
+            }
+            return m;
+        };
+        for (let i = 0; i < idx.length; i += 3) {
+            const a = idx[i], b = idx[i + 1], c = idx[i + 2];
+            const ab = medio(a, b), bc = medio(b, c), ca = medio(c, a);
+            salida.push(a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca);
+        }
+        idx = salida;
+    }
+
+    const fina = new THREE.BufferGeometry();
+    fina.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    fina.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    fina.setIndex(idx);
+    return fina;
+}
+
+function geometriaHoja(largo, ancho, semilla) {
+    const plana = new THREE.ShapeGeometry(formaHojaFicus(largo, ancho, semilla), 6);
+
+    // LAS UV DE ShapeGeometry NO ESTÁN NORMALIZADAS. El código de three las
+    // emite con un comentario que lo dice —`uvs.push( vertex.x, vertex.y ); //
+    // world uvs`—: son las coordenadas del plano tal cual, no un 0..1.
+    //
+    // Con hojas de unas 25 unidades de largo, la u iba de 0 a 25. Con el
+    // envoltorio por defecto (ClampToEdge) eso significa que TODA la hoja,
+    // salvo una franja de una unidad junto al pecíolo, se pintaba con la
+    // última columna de píxeles del lienzo. La nervadura llevaba desde el
+    // principio sin verse, y no por sutil: no se estaba dibujando.
+    //
+    // Se normaliza aquí, sobre la malla de partida: subdividirMalla() promedia
+    // las uv linealmente, así que hacerlo antes o después da lo mismo y antes
+    // son muchos menos vértices.
+    const uvPlana = plana.attributes.uv;
+    for (let i = 0; i < uvPlana.count; i++) {
+        uvPlana.setXY(i, uvPlana.getX(i) / largo,
+                         (uvPlana.getY(i) + ancho) / (2 * ancho));
+    }
+
+    // Dos pasadas: cada triángulo del contorno pasa a dieciséis. Son unos dos
+    // mil triángulos por hoja y trece hojas en toda la escena — nada al lado de
+    // los cien libros, y es la diferencia entre una hoja y una pajarita.
+    const geo = subdividirMalla(plana, 2);
+    // La malla de partida no llega a la escena, así que destruir() no la vería.
+    plana.dispose();
+
+    const s = hashEstante('alabeo|' + semilla);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const t = Math.min(1, Math.max(0, x / largo));
+        const r = Math.abs(y) / ancho;
+
+        // La caída hacia la punta: es el peso de una hoja que llega a medio
+        // metro. Sin ella la pala sale tiesa y parece de plástico.
+        const caida = -Math.pow(t, 1.7) * largo * 0.30;
+        // El canal a lo largo del nervio, que es como una hoja grande se
+        // sostiene sin doblarse por la mitad.
+        const canal = Math.pow(r, 1.8) * ancho * 0.26;
+        // Y la ONDA DEL MARGEN en 3D, no solo en el contorno. Esto es lo que
+        // de verdad vende la hoja: recortar el borde en zigzag y dejar la
+        // superficie plana da una sierra; ondular la superficie hace que cada
+        // seno coja la luz de la lámpara de una manera distinta y la hoja pase
+        // a tener relieve propio. Crece con r² para que el nervio no se mueva.
+        const onda = Math.sin(t * Math.PI * 3.0 + s * 6.283) * r * r * ancho * 0.07;
+        // Torsión suave: ninguna hoja está contenida en un plano.
+        const alabeo = y * t * (s - 0.5) * 0.45;
+
+        pos.setZ(i, caida + canal + onda + alabeo);
+    }
+    geo.computeVertexNormals();
+    return geo;
+}
+
+// Nervadura, en DOS mapas que salen del mismo dibujo.
+//
+// `map` MULTIPLICA al color del material, así que solo puede oscurecer: por
+// eso el fondo del lienzo es gris y los nervios BLANCOS. Un nervio pintado de
+// un color propio competiría con la hoja; así lo único que pasa es que el
+// limbo baja un punto y los nervios se quedan donde están, que es exactamente
+// cómo se ve un ficus lyrata — nervadura pálida y muy marcada sobre verde
+// oscuro.
+//
+// Y `bumpMap`, que es la mitad que faltaba. Una nervadura solo pintada es un
+// dibujo sobre una superficie lisa, y se nota: la hoja sigue leyéndose como
+// una pala de color uniforme con unas rayas encima. En relieve, el nervio
+// central levanta un caballete y los secundarios surcan el limbo, así que la
+// luz de la lámpara los recorre y la hoja pasa a tener superficie. Es el mismo
+// razonamiento que la tarima: el `map` dice de qué color es, el relieve dice
+// que existe.
+//
+// Es el rasgo que más identifica a esta hoja después del contorno: los nervios
+// secundarios salen muy abiertos respecto al central y llegan hasta el margen.
+function texturaNervio() {
+    return texturaCacheada('nervio-hoja', () => {
+        const W = 512, H = 256;
+        const lienzo = document.createElement('canvas');
+        lienzo.width = W;
+        lienzo.height = H;
+        const ctx = lienzo.getContext('2d');
+
+        // Gris medio, no blanco: es el margen que deja sitio a que los nervios
+        // se vean más claros que el limbo.
+        ctx.fillStyle = '#b4b4b4';
+        ctx.fillRect(0, 0, W, H);
+
+        // Moteado del limbo. Una hoja grande nunca es de un tono plano, y sin
+        // esto toda la variación de la hoja depende de la geometría.
+        for (let i = 0; i < 260; i++) {
+            const a = hashEstante('limbo|' + i);
+            const b = hashEstante('limbo|b|' + i);
+            ctx.fillStyle = a > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+            ctx.beginPath();
+            ctx.ellipse(a * W, b * H, 6 + a * 22, 4 + b * 12, b * 3.1, 0, 6.283);
+            ctx.fill();
+        }
+
+        // El nervio central corre a media altura: la u va del pecíolo a la
+        // punta y la v cruza la hoja, con el nervio justo en v = 0.5.
+        ctx.lineCap = 'round';
+
+        // Secundarios primero, para que el central les pase por encima. Muy
+        // abiertos, y ni equidistantes ni iguales: a paso fijo y mismo grosor
+        // la nervadura sale un peine, que es justo lo que la delata como
+        // dibujo. El desorden lo pone el hash, no Math.random, por lo de
+        // siempre — el muro se reconstruye en cada pulsación.
+        //
+        // Cada nervio se traza en varios tramos que van adelgazando y perdiendo
+        // opacidad hacia el margen: un nervio de grosor constante hasta el
+        // borde es lo segundo que lo delata.
+        const TRAMOS = 5;
+        for (let i = 1; i < 12; i++) {
+            const j = hashEstante('nervio|' + i);
+            const k = hashEstante('nervio|k|' + i);
+            const x = ((i + (j - 0.5) * 0.55) / 12) * W;
+            const abre = 0.052 + k * 0.026;
+            [1, -1].forEach(lado => {
+                const desvio = lado > 0 ? j : k;
+                for (let t = 0; t < TRAMOS; t++) {
+                    const a0 = t / TRAMOS, a1 = (t + 1) / TRAMOS;
+                    const pt = u => [
+                        x + W * abre * u * u,
+                        H / 2 + lado * H * 0.54 * u * (1 + (desvio - 0.5) * 0.18)
+                    ];
+                    ctx.strokeStyle = 'rgba(255, 255, 255, ' +
+                        (0.34 * (1 - a0 * 0.75)).toFixed(3) + ')';
+                    ctx.lineWidth = 3.0 * (1 - a0 * 0.62);
+                    ctx.beginPath();
+                    ctx.moveTo(...pt(a0));
+                    ctx.lineTo(...pt(a1));
+                    ctx.stroke();
+                }
+            });
+        }
+
+        // Sombra bajo el central: es lo que lo despega del limbo.
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.20)';
+        ctx.lineWidth = 11;
+        ctx.beginPath();
+        ctx.moveTo(0, H / 2 + 5);
+        ctx.lineTo(W, H / 2 + 5);
+        ctx.stroke();
+
+        // Y el central, que se estrecha hacia la punta.
+        const central = ctx.createLinearGradient(0, 0, W, 0);
+        central.addColorStop(0, 'rgba(255, 255, 255, 0.80)');
+        central.addColorStop(1, 'rgba(255, 255, 255, 0.34)');
+        ctx.strokeStyle = central;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(0, H / 2);
+        ctx.lineTo(W, H / 2);
+        ctx.stroke();
+
+        const tex = new THREE.CanvasTexture(lienzo);
+        tex.encoding = THREE.sRGBEncoding;
+        tex.anisotropy = ANISOTROPIA;
+        return tex;
+    });
+}
+
+// La maceta es de torno, literalmente: un perfil girado con LatheGeometry.
+// Un cilindro con un bisel se ve como un cubo de obra; lo que hace que se lea
+// como terracota es la panza y el labio del borde.
+function construirMaceta(alto, radio) {
+    const perfil = [];
+    const pasos = 14;
+    for (let i = 0; i <= pasos; i++) {
+        const t = i / pasos;
+        // Estrecha en la base, panza a media altura, recogida bajo el labio.
+        const r = radio * (0.62 + 0.42 * Math.sin(Math.PI * Math.pow(t, 0.8)) + t * 0.16);
+        perfil.push(new THREE.Vector2(r, t * alto * 0.92));
+    }
+    perfil.push(new THREE.Vector2(radio * 1.12, alto * 0.94));   // labio, hacia fuera
+    perfil.push(new THREE.Vector2(radio * 1.10, alto));
+    perfil.push(new THREE.Vector2(radio * 0.98, alto));          // canto interior
+
+    const geo = new THREE.LatheGeometry(perfil, 28);
+    const material = new THREE.MeshStandardMaterial({
+        color: colorMaterial('--maceta', '#6B4A38'),
+        roughness: 0.88,
+        metalness: 0.02,
+        envMapIntensity: 0.14,
+        userData: { entornoFijo: true },
+        side: THREE.DoubleSide
+    });
+
+    const maceta = new THREE.Mesh(geo, material);
+    maceta.castShadow = true;
+    maceta.receiveShadow = true;
+    return maceta;
+}
+
+// Planta entera. `altura` es de la base de la maceta a la hoja más alta.
+function construirPlanta(altura) {
+    const planta = new THREE.Group();
+
+    const ALTO_MACETA = altura * 0.20;
+    const RADIO_MACETA = ALTO_MACETA * 0.70;
+    planta.add(construirMaceta(ALTO_MACETA, RADIO_MACETA));
+
+    // Tierra: un disco hundido bajo el labio. Sin él se ve el interior hueco
+    // de la maceta desde arriba y se acaba la ilusión.
+    const tierra = new THREE.Mesh(
+        new THREE.CircleGeometry(RADIO_MACETA * 1.02, 24),
+        new THREE.MeshStandardMaterial({
+            color: colorMaterial('--tierra', '#1A1410'),
+            roughness: 1,
+            metalness: 0
+        })
+    );
+    tierra.rotation.x = -Math.PI / 2;
+    tierra.position.y = ALTO_MACETA * 0.9;
+    tierra.receiveShadow = true;
+    planta.add(tierra);
+
+    // EL TRONCO. Es la mitad de la silueta de un ficus lyrata: un fuste pelado
+    // y claro que sube desde la tierra y no tiene nada hasta bien arriba. Una
+    // mata de hojas saliendo del tiesto sería otra planta distinta.
+    //
+    // Se construye como un cilindro con segmentos y se le desplaza el eje: un
+    // tronco perfectamente recto se lee como un palo de escoba, y curvarlo con
+    // una función suave de la altura cuesta un bucle.
+    const Y_BASE = ALTO_MACETA * 0.88;
+    const Y_COPA = altura * 0.74;
+    const ALTO_TRONCO = Y_COPA - Y_BASE;
+    const R_TRONCO = altura * 0.015;
+    const inclina = t => Math.sin(t * 3.4) * ALTO_TRONCO * 0.06;
+
+    const geoTronco = new THREE.CylinderGeometry(R_TRONCO * 0.72, R_TRONCO,
+                                                 ALTO_TRONCO, 10, 14);
+    const posT = geoTronco.attributes.position;
+    for (let i = 0; i < posT.count; i++) {
+        const t = (posT.getY(i) + ALTO_TRONCO / 2) / ALTO_TRONCO;
+        posT.setX(i, posT.getX(i) + inclina(t));
+    }
+    geoTronco.computeVertexNormals();
+
+    const tronco = new THREE.Mesh(geoTronco, new THREE.MeshStandardMaterial({
+        color: colorMaterial('--planta-tronco', '#6B5C4A'),
+        roughness: 0.88,
+        metalness: 0,
+        envMapIntensity: 0.18,
+        userData: { entornoFijo: true }
+    }));
+    tronco.position.y = Y_BASE + ALTO_TRONCO / 2;
+    tronco.castShadow = true;
+    planta.add(tronco);
+
+    // Tres materiales de hoja, no uno por hoja: a esta escala la variación que
+    // se aprecia es de tono, y unos pocos tonos ya rompen la mancha plana. Es
+    // la misma cuenta que hace texturaHojas() con sus seis variantes.
+    //
+    // El tercero es el oscuro: las hojas de dentro de la copa reciben menos
+    // luz que las de fuera, y sin esa diferencia la copa no tiene volumen.
+    const nervio = texturaNervio();
+    const materiales = [
+        token('--planta-hoja', '#2C4A33'),
+        token('--planta-hoja-clara', '#3D6242'),
+        token('--planta-hoja-honda', '#1D3324')
+    ].map(hex => new THREE.MeshStandardMaterial({
+        color: new THREE.Color(hex).convertSRGBToLinear(),
+        map: nervio,
+        // El mismo dibujo en relieve. Sin esto la nervadura es una calcomanía
+        // sobre una superficie perfectamente lisa.
+        bumpMap: nervio,
+        bumpScale: 0.55,
+        // La hoja del ficus lyrata es CORIÁCEA y brillante, bastante más que
+        // la de una monstera: quiere especular. Pero el entorno de
+        // RoomEnvironment ilumina TAMBIÉN en difuso, y al 0.30 del resto de la
+        // escena las hojas salían verde menta. Se marcan como fijas para que
+        // ajustarEntorno() no las vuelva a subir.
+        //
+        // El brillo bajó a 0.62 cuando las hojas salían de plástico, pero el
+        // problema no era que brillaran: era que brillaban PLANO, porque el
+        // relieve no existía y el reflejo barría la pala entera de una pieza.
+        // Con la nervadura en bumpMap el especular se rompe solo, y se puede
+        // volver a subir hasta donde una hoja coriácea de verdad lo tiene.
+        roughness: 0.52,
+        metalness: 0,
+        envMapIntensity: 0.11,
+        userData: { entornoFijo: true },
+        side: THREE.DoubleSide
+    }));
+
+    const peciolo = new THREE.MeshStandardMaterial({
+        color: colorMaterial('--planta-tallo', '#2A4026'),
+        roughness: 0.7,
+        metalness: 0,
+        envMapIntensity: 0.16,
+        userData: { entornoFijo: true }
+    });
+
+    // Trece hojas grandes repartidas por los tres cuartos altos del tronco.
+    // Van pocas y enormes a propósito: repartir la misma masa en más piezas es
+    // lo que convertía la monstera en un surtidor de tiras.
+    const HOJAS = 13;
+    const LARGO_HOJA = altura * 0.25;
+
+    for (let i = 0; i < HOJAS; i++) {
+        const h = hashEstante('ficus|hoja|' + i);
+        const g = hashEstante('ficus|giro|' + i);
+        const f = HOJAS > 1 ? i / (HOJAS - 1) : 0;   // 0 = la más baja
+
+        // Ángulo áureo: reparte las hojas alrededor del tronco sin que dos
+        // caigan nunca en la misma dirección, que es justo el defecto de
+        // repartir a intervalos iguales.
+        const azim = i * 2.39996 + g * 0.3;
+        const y = Y_BASE + ALTO_TRONCO * (0.26 + 0.74 * f);
+        const x = inclina((y - Y_BASE) / ALTO_TRONCO);
+
+        // El pecíolo sale del tronco y es corto: en esta planta la hoja nace
+        // casi pegada al fuste.
+        const largoPeciolo = LARGO_HOJA * (0.20 + h * 0.10);
+        const nudo = new THREE.Group();
+        nudo.position.set(x, y, 0);
+        nudo.rotation.y = -azim;
+
+        // Las de abajo se abren y caen; las de arriba se recogen y apuntan
+        // hacia la luz. Es lo que le da forma de copa en vez de de rueda.
+        const pico = new THREE.Group();
+        pico.rotation.z = -0.55 + f * 1.05 + (h - 0.5) * 0.2;
+        nudo.add(pico);
+
+        const tallo = new THREE.Mesh(
+            new THREE.CylinderGeometry(R_TRONCO * 0.20, R_TRONCO * 0.30,
+                                       largoPeciolo, 6),
+            peciolo
+        );
+        // El cilindro nace vertical; se tumba para que salga en el sentido de
+        // la hoja, que es +X en el plano del pico.
+        tallo.rotation.z = -Math.PI / 2;
+        tallo.position.x = largoPeciolo / 2;
+        tallo.castShadow = true;
+        pico.add(tallo);
+
+        const largo = LARGO_HOJA * (1.14 - 0.22 * f) * (0.88 + h * 0.26);
+        // OJO: el segundo argumento es la SEMIANCHURA. La hoja se dibuja a
+        // ±borde(t), así que el ancho total es el doble de esto. Estuvo un
+        // rato en 0.62 del largo, o sea 1.24 de ancho total: hojas MÁS ANCHAS
+        // QUE LARGAS, que salían redondas y convertían el ficus en un árbol
+        // de jade. Un ficus lyrata ronda el 1.6:1.
+        const hoja = new THREE.Mesh(geometriaHoja(largo, largo * 0.29, i),
+                                    materiales[(i * 5 + Math.round(g * 3)) % materiales.length]);
+        hoja.position.x = largoPeciolo;
+        // Vuelta sobre su propio nervio: sin esto todas las hojas enseñan la
+        // cara igual y se ve el patrón.
+        hoja.rotation.x = (g - 0.5) * 0.7;
+        hoja.castShadow = true;
+        pico.add(hoja);
+
+        planta.add(nudo);
+    }
+
+    return planta;
+}
+
+// ----------------------------------------
+// La mesa auxiliar
+// ----------------------------------------
+
+function construirMesa(ancho, fondo, alto) {
+    const mesa = new THREE.Group();
+
+    const GRUESO = 3.4;
+    const tapa = new THREE.Mesh(
+        new THREE.RoundedBoxGeometry(ancho, GRUESO, fondo, 2, 0.6),
+        new THREE.MeshStandardMaterial({
+            map: texturaMadera(ancho, fondo),
+            roughness: 0.55,
+            metalness: 0.05
+        })
+    );
+    tapa.position.y = alto - GRUESO / 2;
+    tapa.castShadow = true;
+    tapa.receiveShadow = true;
+    mesa.add(tapa);
+
+    const oscura = new THREE.MeshStandardMaterial({
+        color: colorMaterial('--madera-canto', '#39271B'),
+        roughness: 0.8,
+        metalness: 0.03
+    });
+
+    // Faldón: la franja bajo el tablero que une las patas. Es lo que separa
+    // una mesa de cuatro palos con una tabla encima.
+    const faldon = new THREE.Mesh(
+        new THREE.RoundedBoxGeometry(ancho - 7, 4.6, fondo - 7, 2, 0.4),
+        oscura
+    );
+    faldon.position.y = alto - GRUESO - 2.3;
+    faldon.castShadow = true;
+    mesa.add(faldon);
+
+    // Patas torneadas: más estrechas abajo. Un prisma recto da mesa de
+    // montaje; el cono ligero da mueble.
+    const altoPata = alto - GRUESO - 0.6;
+    const pata = new THREE.CylinderGeometry(2.6, 1.9, altoPata, 10);
+    const dx = ancho / 2 - 4.5;
+    const dz = fondo / 2 - 4.5;
+    [[-dx, -dz], [dx, -dz], [-dx, dz], [dx, dz]].forEach(([x, z], i) => {
+        const m = new THREE.Mesh(i === 0 ? pata : pata.clone(), oscura);
+        m.position.set(x, altoPata / 2, z);
+        m.castShadow = true;
+        mesa.add(m);
+    });
+
+    return mesa;
+}
+
+// ----------------------------------------
+// La lámpara de la mesa
+// ----------------------------------------
+// El objeto que más hace por la escena después del pozo de luz, y por la misma
+// razón: una habitación iluminada por una direccional sin origen visible es un
+// estudio de fotografía. En cuanto se ve la lámpara, la luz cálida que entra
+// por la izquierda deja de ser un ajuste del render y pasa a tener un motivo
+// dentro del cuadro.
+//
+// Lleva luz propia —un punto cálido con caída— porque la pantalla encendida
+// sin un charco de luz debajo se lee como un objeto pintado de amarillo. Va
+// SIN sombra a propósito: la sombra de la escena la da la lámpara direccional,
+// que está congelada (ver congelarSombras), y un segundo mapa de sombras
+// costaría lo mismo que todo lo demás junto para iluminar un rincón.
+// Tela de la pantalla: oscura en el hombro, encendida en el borde de abajo.
+// Va a la vez de `map` y de `emissiveMap`, así que modula el color difuso y el
+// brillo propio con el mismo dibujo — que es justo lo que hace una tela con
+// una bombilla dentro.
+function texturaPantallaLampara() {
+    return texturaCacheada('pantalla-lampara', () => {
+        const lienzo = document.createElement('canvas');
+        lienzo.width = 4;
+        lienzo.height = 128;
+        const ctx = lienzo.getContext('2d');
+        const g = ctx.createLinearGradient(0, 0, 0, 128);
+        g.addColorStop(0, '#5e5346');      // hombro, a contraluz
+        g.addColorStop(0.42, '#b7a488');
+        g.addColorStop(1, '#ffffff');      // el faldón, donde sale la luz
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 4, 128);
+
+        const tex = new THREE.CanvasTexture(lienzo);
+        tex.encoding = THREE.sRGBEncoding;
+        return tex;
+    });
+}
+
+// ¿Está encendida? Estado de MÓDULO, igual que `vistaMuro`, y por la misma
+// razón: renderizarLibros() desmonta y vuelve a montar el muro en cada
+// pulsación del buscador. Una variable dentro de montarMuro() se perdería y la
+// lámpara se volvería a encender sola al teclear.
+let luzLampara = true;
+
+// Lo que el muro montado deja aquí para que lo llame el interruptor del DOM.
+// Es null mientras no haya muro —en el modal no hay lámpara—, y alternarLuz()
+// se limita a guardar el estado si no hay nada que encender.
+let aplicarLuzMuro = null;
+
+function luzLamparaEncendida() {
+    return luzLampara;
+}
+
+function alternarLuzLampara(valor) {
+    luzLampara = typeof valor === 'boolean' ? valor : !luzLampara;
+    if (aplicarLuzMuro) aplicarLuzMuro();
+    // La lámpara se puede pulsar en la escena, y entonces el botón del menú
+    // se quedaría diciendo lo contrario de lo que pasa. Es la misma relación
+    // cíclica que auth.js ↔ app.js resuelve con window.gaboApp, y se resuelve
+    // igual: este archivo carga antes que app.js, pero la llamada es en
+    // tiempo de ejecución, no de carga.
+    window.gaboApp?.sincronizarBotonLuz?.(luzLampara);
+    return luzLampara;
+}
+
+function construirLamparaMesa(alto) {
+    const grupo = new THREE.Group();
+    const R = alto * 0.34;
+
+    const bronce = new THREE.MeshStandardMaterial({
+        color: colorMaterial('--lampara-pie', '#3A3128'),
+        roughness: 0.42,
+        metalness: 0.65,
+        envMapIntensity: 0.5,
+        userData: { entornoFijo: true }
+    });
+
+    // Pie: un perfil de torno, como la maceta. Un cilindro se lee como un bote.
+    const perfil = [
+        new THREE.Vector2(R * 0.92, 0),
+        new THREE.Vector2(R * 0.90, alto * 0.035),
+        new THREE.Vector2(R * 0.34, alto * 0.09),
+        new THREE.Vector2(R * 0.12, alto * 0.16),
+        new THREE.Vector2(R * 0.075, alto * 0.62)
+    ];
+    const pie = new THREE.Mesh(new THREE.LatheGeometry(perfil, 20), bronce);
+    pie.castShadow = true;
+    grupo.add(pie);
+
+    // Pantalla: tronco de cono ABIERTO por arriba y por abajo, para que la luz
+    // se derrame por los dos lados como en una pantalla de verdad. Cerrada, el
+    // cono se ve como un sombrero macizo.
+    //
+    // El degradado de la tela es lo que la salva de parecer un recorte de
+    // papel blanco. Una pantalla encendida NO es de un solo valor: la bombilla
+    // está dentro y abajo, así que el borde inferior arde y el hombro superior
+    // se queda en penumbra. Con un color plano y el emissive al alza salía un
+    // cono blanco reventado que era lo más luminoso del cuadro — y lo más
+    // luminoso del cuadro tiene que ser un libro, no un mueble auxiliar.
+    const tela = texturaPantallaLampara();
+    const pantalla = new THREE.Mesh(
+        new THREE.CylinderGeometry(R * 0.66, R * 1.12, alto * 0.42, 24, 1, true),
+        new THREE.MeshStandardMaterial({
+            color: colorMaterial('--pantalla', '#E8C48A'),
+            map: tela,
+            // La pantalla es el único emisor visible de la escena. Sin
+            // `emissive` sería un cono beige apagado con una luz saliendo de
+            // dentro por arte de magia.
+            emissive: colorMaterial('--pantalla', '#E8C48A'),
+            emissiveMap: tela,
+            emissiveIntensity: 0.34,
+            roughness: 0.95,
+            metalness: 0,
+            side: THREE.DoubleSide,
+            envMapIntensity: 0.1,
+            userData: { entornoFijo: true }
+        })
+    );
+    pantalla.position.y = alto * 0.78;
+    grupo.add(pantalla);
+
+    // La bombilla. `distance` acota hasta dónde llega: sin ella el punto
+    // iluminaría la pared del fondo entera y la caída —que es justo lo que se
+    // busca— desaparecería.
+    const bombilla = new THREE.PointLight(0xFFD2A0, 2.7, alto * 6, 1.7);
+    bombilla.position.y = alto * 0.80;
+    grupo.add(bombilla);
+
+    // Marcada para el raycaster: pulsar la lámpara la apaga. `esLampara` va en
+    // el grupo entero, así que vale tanto el clic en la pantalla como en el pie.
+    grupo.userData.esLampara = true;
+    grupo.userData.bombilla = bombilla;
+    grupo.userData.pantalla = pantalla.material;
+    grupo.userData.brilloMaximo = bombilla.intensity;
+
+    return grupo;
+}
+
+// Tres libros tumbados. La mesa vacía se leía como un sitio donde no pasa
+// nada; una pila a medio leer dice de qué va la habitación, y es el único
+// decorado de la escena que habla del tema de la app.
+function construirPilaLibros(ancho) {
+    const grupo = new THREE.Group();
+    const fondo = ancho * 0.72;
+    let y = 0;
+
+    // Tonos de encuadernación, no del arcoíris: el hash repartía el tono por
+    // toda la rueda y salían tres piezas turquesa que se leían como un juego
+    // de platos. Marrón, granate y azul de biblioteca.
+    const TONOS = [0.075, 0.99, 0.60];
+
+    for (let i = 0; i < 3; i++) {
+        const h = hashEstante('pila|' + i);
+        // Chatos: un libro tumbado es mucho más ancho que grueso. Con el
+        // grosor de antes eran tacos, y redondeados parecían pastillas.
+        const alto = ancho * (0.055 + h * 0.035);
+        const tapa = new THREE.MeshStandardMaterial({
+            color: new THREE.Color().setHSL(TONOS[i], 0.22 + h * 0.14, 0.17 + h * 0.12)
+                                    .convertSRGBToLinear(),
+            roughness: 0.66 + h * 0.28,
+            metalness: 0.03
+        });
+        const libro = new THREE.Mesh(
+            new THREE.RoundedBoxGeometry(ancho * (0.84 + h * 0.16), alto,
+                                         fondo * (0.84 + h * 0.16), 2, alto * 0.10),
+            tapa
+        );
+        libro.position.y = y + alto / 2;
+        // Nadie apila tres libros perfectamente a escuadra.
+        libro.rotation.y = (h - 0.5) * 0.5;
+        libro.castShadow = true;
+        libro.receiveShadow = true;
+        grupo.add(libro);
+        y += alto;
+    }
+
+    return grupo;
+}
+
+// ----------------------------------------
+// Montaje
+// ----------------------------------------
+// Devuelve el grupo ya colocado, o null si no hay nada que poner. Se le pasa
+// la caja del MUEBLE: todo se sitúa relativo al estante —a sus lados y sobre
+// el mismo suelo—, así que si el estante crece o encoge al filtrar, la
+// escenografía le sigue en vez de quedarse flotando.
+function construirEscenografia(mueble) {
+    const caja = new THREE.Box3().setFromObject(mueble);
+    if (caja.isEmpty()) return null;
+
+    const tam = caja.getSize(new THREE.Vector3());
+    const centro = caja.getCenter(new THREE.Vector3());
+    const suelo = caja.min.y;           // el mueble se apoya; la escenografía también
+    const frente = caja.max.z;
+
+    const grupo = new THREE.Group();
+
+    // Planta a la izquierda, alta: dos tercios del mueble. Una planta baja
+    // junto a un mueble de esta altura se lee como un detalle, no como parte
+    // de la habitación.
+    //
+    // Se coloca por el borde de la copa, no por el centro: la hoja más
+    // exterior llega a ALCANCE + su largo, y con la planta más cerca las
+    // hojas entraban por delante de la última balda y tapaban su rótulo. Esos
+    // rótulos son el único sitio del muro donde se lee el nombre del tema.
+    const ALTURA_PLANTA = tam.y * 0.68;
+    const planta = construirPlanta(ALTURA_PLANTA);
+    // El vuelo de la copa: el pecíolo más largo (0.30 · 0.30) más la hoja más
+    // larga (0.30 · 1.08 · 1.14), por el coseno del ángulo al que sale. Los
+    // números salen todos de construirPlanta y hay que traerlos a la vez que
+    // allí — cada vez que la hoja ha crecido y esto se ha quedado atrás, la
+    // copa ha vuelto a meterse por delante de la última balda, encima de su
+    // rótulo, que es el único sitio del muro donde se lee el nombre del tema.
+    const vueloCopa = ALTURA_PLANTA * 0.42;
+    planta.position.set(caja.min.x - vueloCopa - tam.x * 0.02, suelo, frente - tam.z * 0.1);
+    grupo.add(planta);
+
+    // Mesa a la derecha, un poco por delante del plano del mueble. Las
+    // siluetas que se solapan son lo que da profundidad a una escena; tres
+    // objetos alineados en la misma z se ven como un friso.
+    const ANCHO_MESA = tam.y * 0.30;
+    const FONDO_MESA = tam.y * 0.22;
+    const ALTO_MESA = tam.y * 0.28;
+    const mesa = construirMesa(ANCHO_MESA, FONDO_MESA, ALTO_MESA);
+    mesa.position.set(caja.max.x + tam.y * 0.20, suelo, frente + tam.z * 0.5);
+    grupo.add(mesa);
+
+    // Y encima, lo que hacía falta para que la mesa sea de alguien: la lámpara
+    // detrás y a un lado, los libros delante. El origen local de la mesa está
+    // en el suelo, así que el tablero cae justo a ALTO_MESA.
+    const lamparaMesa = construirLamparaMesa(ALTO_MESA * 0.70);
+    lamparaMesa.position.set(-ANCHO_MESA * 0.20, ALTO_MESA, -FONDO_MESA * 0.16);
+    mesa.add(lamparaMesa);
+    // El montaje necesita encontrarla para cablear el interruptor.
+    grupo.userData.lampara = lamparaMesa;
+
+    const pila = construirPilaLibros(ANCHO_MESA * 0.36);
+    pila.position.set(ANCHO_MESA * 0.22, ALTO_MESA, FONDO_MESA * 0.14);
+    pila.rotation.y = 0.34;
+    mesa.add(pila);
+
+    return grupo;
+}
+
 let muro = null;
 
 // `baldas` son {id, nombre, color, libros}: cada una trae ya sus libros, de
@@ -1316,7 +2826,7 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
         const ALTO_TRASERA = SEPARACION - 2;
         const rotulo = registrar(texturaTrasera(tema.nombre, delTema.length, tema.color, ANCHO, ALTO_TRASERA));
         const maderaFondo = new THREE.MeshStandardMaterial({
-            color: new THREE.Color(token('--superficie-honda', '#100C09')),
+            color: colorMaterial('--superficie-honda', '#100C09'),
             roughness: 1,
             metalness: 0
         });
@@ -1370,13 +2880,38 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
     construirCarcasa(mueble, ANCHO, FONDO);
 
     escena.add(mueble);
-    construirHabitacion(escena, mueble, ctx.lampara);
+
+    // La habitación se amuebla. Va a la escena y NO dentro de `mueble`: los
+    // topes del paneo y del zoom siguen siendo los del estante, que es de lo
+    // que va la app. Pero sí entra en `marco`, que es lo que la cámara
+    // encuadra — si no, la planta queda fuera de cuadro y no la ve nadie.
+    const escenografia = construirEscenografia(mueble);
+    if (escenografia) escena.add(escenografia);
+
+    const sala = construirHabitacion(escena, mueble, ctx.lampara, escenografia);
     ajustarEntorno(escena);
 
-    const enc = encuadrarEscena(camara, mueble, 1.10);
+    const marco = escenografia ? [mueble, escenografia] : mueble;
+    // Margen ajustado: con la escenografía dentro es el ANCHO el que manda el
+    // encuadre, y el holgado 1.10 de cuando solo se medía el mueble dejaba una
+    // franja de pared vacía arriba y abajo con el estante pequeño en medio.
+    const enc = encuadrarEscena(camara, marco, 1.03);
     const controles = crearControles(camara, ctx.renderer.domElement, enc.centro, enc.dist);
+    // Después de los controles: necesita su maxDistance para saber hasta dónde
+    // hay que seguir viendo.
+    ajustarProfundidad(camara, controles, escena);
+    // El aviso de la navegación arranca el BUCLE, no un fotograma suelto: el
+    // zoom ya no se aplica de una vez en el handler de la rueda, sino a
+    // rebanadas desde animar(), y con un pedirRender() se pintaría la primera
+    // y ahí se quedaría. (`animar` es una declaración de función, así que está
+    // izada; y solo se invoca desde manejadores registrados más abajo, cuando
+    // `navegacion` ya existe.)
     const navegacion = instalarNavegacion(contenedor, camara, escena, mueble, controles,
-                                          () => ctx.pedirRender());
+                                          () => animar(), enc.centro, sala.yPiso);
+    // Una pasada al montar: fija el tope de inclinación que corresponde a la
+    // distancia de partida, y corrige la vista restaurada si venía de una
+    // sesión con el mueble más alto y ahora cae por debajo del suelo.
+    navegacion.limitar();
 
     // La vista se restaura DESPUÉS de crear los controles: necesita fijar
     // también su target, no solo la posición de la cámara.
@@ -1388,10 +2923,65 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
     let usuarioMovio = !!vistaMuro;
     ctx.fijarGanchoResize(() => {
         if (usuarioMovio) return;
-        const e = encuadrarEscena(camara, mueble, 1.10);
+        const e = encuadrarEscena(camara, marco, 1.03);
         controles?.target.copy(e.centro);
         controles?.update();
     });
+
+    // ---- el interruptor de la lámpara
+    //
+    // Apagarla no es solo apagar su bombilla: si se apagara solo el punto de
+    // luz, la habitación se quedaría igual de iluminada por la direccional y
+    // el gesto no se notaría más que en un rincón. La direccional ES esa
+    // lámpara —es la razón de que la clave sea ámbar y venga de la izquierda—,
+    // así que se apaga con ella, y lo que queda es el relleno frío subido: luz
+    // de calle entrando en un cuarto a oscuras.
+    //
+    // La sombra sigue congelada. Cambiar la INTENSIDAD de una luz no invalida
+    // su mapa de sombras —es un uniform, no geometría—, así que congelarSombras
+    // sigue siendo válido y el interruptor no cuesta un recálculo de 2048².
+    const lamparaMesa = escenografia?.userData.lampara ?? null;
+    const CLAVE_ENCENDIDA = ctx.lampara.intensity;
+    const RELLENO_ENCENDIDO = ctx.relleno.intensity;
+    const EMISION_ENCENDIDA = lamparaMesa?.userData.pantalla.emissiveIntensity ?? 0;
+
+    let luzActual = luzLampara ? 1 : 0;
+    let luzObjetivo = luzActual;
+
+    function pintarLuz() {
+        const k = luzActual;
+        ctx.lampara.intensity = CLAVE_ENCENDIDA * (0.22 + 0.78 * k);
+        // El relleno frío SUBE al apagar, no baja: es lo único que queda
+        // iluminando y sin ello el mueble se hundiría en negro liso.
+        ctx.relleno.intensity = RELLENO_ENCENDIDO * (1.55 - 0.55 * k);
+        if (lamparaMesa) {
+            lamparaMesa.userData.bombilla.intensity =
+                lamparaMesa.userData.brilloMaximo * k;
+            lamparaMesa.userData.pantalla.emissiveIntensity =
+                EMISION_ENCENDIDA * (0.03 + 0.97 * k);
+        }
+    }
+
+    // Se registra en el módulo para que el botón del DOM llegue hasta aquí.
+    aplicarLuzMuro = () => {
+        luzObjetivo = luzLampara ? 1 : 0;
+
+        // Con la pestaña en segundo plano el navegador PARA requestAnimationFrame,
+        // y como el fundido vive dentro del bucle de animación, el interruptor se
+        // quedaba a medias: el estado decía "apagada" y las luces seguian al
+        // máximo, esperando un fotograma que no llegaba hasta que volvieras a la
+        // pestaña. Sin fotogramas no hay nada que interpolar y tampoco nadie
+        // mirando, así que se salta el fundido y se aplica de golpe.
+        if (document.hidden) {
+            luzActual = luzObjetivo;
+            pintarLuz();
+            ctx.pedirRender();
+            return;
+        }
+        animar();
+    };
+
+    pintarLuz();
 
     // ---- interacción
     const rayo = new THREE.Raycaster();
@@ -1436,7 +3026,8 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
         const golpes = rayo.intersectObjects(escena.children, true);
         for (const golpe of golpes) {
             let o = golpe.object;
-            while (o && !o.userData?.libroId && !o.userData?.esBalda) o = o.parent;
+            while (o && !o.userData?.libroId && !o.userData?.esBalda
+                     && !o.userData?.esLampara) o = o.parent;
             if (o) return o;
         }
         return null;
@@ -1445,6 +3036,9 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
     function resaltar(grupo, evento) {
         if (resaltado === grupo) return;
         if (resaltado) objetivoZ.set(resaltado, 0);
+        // Solo los libros se levantan al pasar por encima. La lámpara entra
+        // aquí para poner el cursor de mano, pero no se mueve: es un
+        // interruptor, no un objeto que se saca del estante.
         resaltado = grupo && grupo.userData.libroId ? grupo : null;
         if (resaltado) objetivoZ.set(resaltado, 3.4);
         contenedor.style.cursor = grupo ? 'pointer' : '';
@@ -1467,6 +3061,28 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
         animando = true;
         const paso = () => {
             let sigue = false;
+
+            // El fundido de la lámpara. Va aquí y no en un bucle propio porque
+            // este ya existe y ya sabe pararse solo. Un interruptor instantáneo
+            // funciona, pero una lámpara que sube en un cuarto de segundo es la
+            // diferencia entre cambiar un valor y encender una luz.
+            // OJO con la variable: `sigue` significa "sigue habiendo fotograma
+            // siguiente", y más abajo se usa TAMBIÉN como "algo se ha movido,
+            // rehaz la sombra". Para el fundido de la luz eso sería falso y
+            // caro: no se mueve nada, solo cambia una intensidad, y recalcular
+            // un mapa de 2048² treinta veces por un interruptor es exactamente
+            // lo que congelarSombras() existe para evitar. Por eso el fundido
+            // pide fotograma por su cuenta y no toca `sigue`.
+            let sigueLuz = false;
+            if (Math.abs(luzObjetivo - luzActual) > 0.004) {
+                luzActual += (luzObjetivo - luzActual) * 0.16;
+                pintarLuz();
+                sigueLuz = true;
+            } else if (luzActual !== luzObjetivo) {
+                luzActual = luzObjetivo;
+                pintarLuz();
+            }
+
             librosMesh.forEach(g => {
                 const meta = objetivoZ.get(g) ?? 0;
                 const d = meta - g.position.z;
@@ -1484,6 +3100,15 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
             // leen como parte de la posición, lo absorben en sus esféricas y la
             // cámara deriva sola hasta quedarse torcida.
             camara.position.sub(paralajeAplicado);
+
+            // Una rebanada del zoom pendiente. Lleva su propia bandera y no
+            // toca `sigue`, que más abajo significa además "algo se movió,
+            // rehaz la sombra" — y en un zoom no se mueve nada de la escena,
+            // solo la cámara.
+            // Va aquí, ya sin el parálax encima, para que el escalado se
+            // aplique sobre la posición real de la cámara y no sobre la
+            // desviada unos grados por el cursor.
+            const sigueZoom = navegacion.pasoZoom();
 
             // update() devuelve true mientras la cámara siga moviéndose.
             const camaraSeMueve = controles ? controles.update() : false;
@@ -1505,7 +3130,7 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
 
             ctx.renderer.render(escena, camara);
 
-            if (sigue || camaraSeMueve || paralajeSeMueve) {
+            if (sigue || sigueLuz || sigueZoom || camaraSeMueve || paralajeSeMueve) {
                 requestAnimationFrame(paso);
             } else {
                 animando = false;
@@ -1551,6 +3176,8 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
         if (!o) return;
         if (o.userData.libroId) {
             alPulsarLibro?.(o.userData.libroId);
+        } else if (o.userData.esLampara) {
+            alternarLuzLampara();
         } else if (o.userData.esBalda) {
             alPulsarTema?.(o.userData.temaId);
         }
@@ -1562,7 +3189,7 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
         aCoordenadas(e);
         if (tocado()) return;          // solo sobre el fondo
 
-        const e2 = encuadrarEscena(camara, mueble, 1.10);
+        const e2 = encuadrarEscena(camara, marco, 1.03);
         if (controles) {
             controles.target.copy(e2.centro);
             controles.update();
@@ -1612,6 +3239,10 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
     muro = {
         ctx,
         destruir() {
+            // El interruptor del DOM apuntaba a este muro: se descuelga antes
+            // que nada. El ESTADO (luzLampara) sobrevive a propósito — es lo
+            // que hace que la lámpara siga apagada al teclear en el buscador.
+            aplicarLuzMuro = null;
             contenedor.removeEventListener('pointerdown', alBajar);
             contenedor.removeEventListener('pointermove', alMover);
             contenedor.removeEventListener('pointerleave', alSalir);
@@ -1715,7 +3346,7 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
                 acento, ANCHO, ALTO_TRASERA
             ));
             const maderaFondo = new THREE.MeshStandardMaterial({
-                color: new THREE.Color(token('--superficie-honda', '#100C09')),
+                color: colorMaterial('--superficie-honda', '#100C09'),
                 roughness: 1,
                 metalness: 0
             });
@@ -1747,7 +3378,7 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
     }
 
     escena.add(mueble);
-    construirHabitacion(escena, mueble, ctx.lampara);
+    const sala = construirHabitacion(escena, mueble, ctx.lampara);
     ajustarEntorno(escena);
 
     const enc = encuadrarEscena(camara, mueble, 1.16);
@@ -1756,8 +3387,13 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
     // sitios. La vista del modal NO se persiste — cada balda se abre de
     // frente, que es como quieres verla al entrar.
     const controles = crearControles(camara, ctx.renderer.domElement, enc.centro, enc.dist);
+    ajustarProfundidad(camara, controles, escena);
+    // Sin centro de vista propio —el modal no lleva escenografía, así que el
+    // reencuadre cae en el centro del mueble— pero SÍ con la cota del suelo:
+    // el tope de inclinación hace aquí la misma falta que en el muro.
     const navegacion = instalarNavegacion(contenedor, camara, escena, mueble, controles,
-                                          () => ctx.pedirRender());
+                                          () => animar(), null, sala.yPiso);
+    navegacion.limitar();
     if (controles) contenedor.classList.add('orbitable');
 
     // ---- interacción (misma mecánica que el muro)
@@ -1801,6 +3437,12 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
                     g.rotation.y = -meta * 0.06;
                 }
             });
+            // Una rebanada del zoom pendiente. Lleva su propia bandera y no
+            // toca `sigue`, que más abajo significa además "algo se movió,
+            // rehaz la sombra" — y en un zoom no se mueve nada de la escena,
+            // solo la cámara.
+            const sigueZoom = navegacion.pasoZoom();
+
             // update() devuelve true mientras la cámara siga moviéndose. Con
             // amortiguado, la inercia solo avanza si esto corre cada
             // fotograma; antes solo se llamaba mientras un libro se movía y
@@ -1808,7 +3450,7 @@ function montarEstanteModal(contenedor, tema, librosDelTema, alPulsarLibro) {
             const camaraSeMueve = controles ? controles.update() : false;
             if (sigue) ctx.lampara.shadow.needsUpdate = true;
             ctx.renderer.render(escena, camara);
-            if (sigue || camaraSeMueve) requestAnimationFrame(paso);
+            if (sigue || sigueZoom || camaraSeMueve) requestAnimationFrame(paso);
             else animando = false;
         };
         requestAnimationFrame(paso);

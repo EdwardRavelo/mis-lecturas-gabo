@@ -80,9 +80,35 @@
     --madera-honda: #251710;
     --madera-canto: #39271B;
 
-    /* La habitación: pared de fondo y suelo */
-    --pared: #13120F;
+    /* La habitación: pared de fondo y tarima */
+    --pared: #191208;
     --suelo: #0B0B0A;
+    --suelo-tabla: #3E2C1D;
+    --suelo-junta: #150E09;
+
+    /* Escenografía: la planta, la maceta y la lámpara de la mesa. Son
+       decorado, no datos: a diferencia de --leido/--leyendo/--pendiente no
+       codifican nada, así que no pasan por el validador de dataviz.
+
+       Estos hexes YA SON el color que se ve, también en el 3D. Lo fueron
+       durante un tiempo, luego dejaron de serlo y ahora vuelven a serlo: three
+       r147 corre con ColorManagement.legacyMode y toma cualquier hex de un
+       material como valor LINEAL, así que un verde bosque salía salvia pálido.
+       Se compensaba escribiendo el token en lineal (--planta-hoja era #081C0C
+       para verse verde), lo que dejaba este bloque lleno de colores que no se
+       parecían a nada. La conversión vive ahora en colorMaterial(), en
+       estante3d.js, en un solo sitio. Aquí se escribe el color y ya está. */
+    --planta-hoja: #2C4A33;
+    --planta-hoja-clara: #3D6242;
+    --planta-hoja-honda: #1D3324;
+    --planta-tallo: #2A4026;
+    --planta-tronco: #4C4235;
+    --maceta: #5A3B2B;
+    --tierra: #171210;
+
+    /* La lámpara de la mesa: la pantalla encendida y el pie */
+    --pantalla: #E8C48A;
+    --lampara-pie: #3A3128;
 
     --peligro: #D08070;
     --peligro-wash: rgba(208, 128, 112, 0.12);
@@ -680,6 +706,14 @@ img { max-width: 100%; display: block; }
 }
 
 .menu-accion:hover .menu-accion-icono { color: var(--tema-acento); }
+
+/* El interruptor de la lámpara. Su punto se enciende con el ámbar de la casa
+   cuando la lámpara está encendida y se apaga con ella, para que el botón diga
+   el estado y no solo la acción — se puede haber apagado pulsandola en la
+   escena, y entonces el menú es lo único que queda para saberlo. El texto y el
+   aria-pressed los lleva app.js; esto es solo el refuerzo visual. */
+#btn-luz .menu-accion-icono { color: var(--laton); }
+#btn-luz.apagada .menu-accion-icono { color: var(--tinta-tenue); }
 
 /* Identidad al pie del menú */
 .menu-usuario {

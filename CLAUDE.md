@@ -32,6 +32,12 @@ Enabling Google means creating an OAuth client in Google Cloud Console with `htt
 
 Verification is manual: load the page in a browser and check the console — the app logs `[Auth]` and `[App]` lifecycle events.
 
+**To look at the 3D shelf there is `banco-estante.html`**, which mounts the furniture directly
+with invented data. The scene is only reachable inside the app and the app wants a Supabase
+session, so checking a change to a light or a wood meant signing in with GitHub and waiting for
+the library to load. `?modal=1` mounts an open shelf instead of the wall. It is not app code —
+nothing links it and it is not in `index.html` — so it can be deleted without consequence.
+
 ## Architecture
 
 Pure client-side SPA. Scripts load as plain `<script>` tags (**not** ES modules) in this order, declared at the bottom of `index.html`:
@@ -262,10 +268,10 @@ The signature component, and since the cut of 2026-09-26 the **only** view: no c
 ### Navigating it: wheel to zoom at the cursor, middle-drag to turn
 
 Both scenes take `OrbitControls` through `crearControles()`, with the same limits so the
-furniture behaves the same in the wall and in the modal: ±30° of azimuth, ±20° around the
-horizontal, and 0.22×–1.25× the fitted distance. The near limit is what lets you get close
-enough to read one shelf's spines; it was 0.55× and that only ever framed the whole cabinet.
-The far limit was 1.6×, which let the cabinet shrink until the edge of the room showed.
+furniture behaves the same in the wall and in the modal: ±30° of azimuth, 20° above the
+horizontal, up to 36° below it, and 0.22×–1.25× the fitted distance. The near limit is what lets
+you get close enough to read one shelf's spines; it was 0.55× and that only ever framed the whole
+cabinet. The far limit was 1.6×, which let the cabinet shrink until the edge of the room showed.
 
 **There is no free pan, and that is the point.** `enablePan` is false and the left button is
 unbound: dragging the furniture anywhere you liked felt chaotic — you ended up somewhere with
@@ -307,10 +313,69 @@ That listener sits on the container in the **capture** phase and calls `stopProp
 so the control's own wheel handler on the canvas never sees the event. Its `enableZoom` stays
 `true` on purpose, because the two-finger pinch is still handled by the control itself.
 
+**The wheel does not move the camera; it books a factor.** Each notch used to apply its 14% in one
+go and the zoom went in steps. Now `alRueda()` only accumulates into `zoomPendiente` and kicks the
+animation loop, and `pasoZoom()` — one call per frame — spends `zoomPendiente^0.22` of it, leaving
+the rest for the next frame. A notch lands in about ten frames of visible travel.
+
+This is only sliceable because **both branches of the zoom are multiplicative scalings about a
+point** — the cursor going in, the target going out — and a scaling is the product of its parts:
+applying the whole factor or N slices of `factor^(1/N)` reaches exactly the same place. The
+zoom-out recentring survives it too, for the same reason it survives chained notches: its product
+telescopes (see below). Measured: zoom hard into a corner until the target is 68 units off centre,
+then zoom all the way out, and it comes back to the opening framing with a deviation of **0**.
+
+Four things to keep in mind here:
+
+- **Accumulating is what makes fast scrolling feel right.** Each notch multiplies into the pending
+  factor rather than reading the live distance, so spinning the wheel does not come up short; and
+  mixing directions cancels out, which is what anyone expects.
+- **Clamping and converging are different things, and conflating them cost accuracy.** The
+  "already at the stop" test used to sit on the per-frame `factor`, but a slice is only 22% of the
+  pending in log terms, so it fired four and a half times too early and threw away 0.2% of the
+  travel *per gesture* — and since each notch restarts from the real distance, that never gets
+  made up, it accumulates. The test now asks whether the stop actually truncated the slice, which
+  is the only real reason to discard what is left. Error per gesture: 0.05%.
+- **It has its own continue flag**, not the loop's `sigue`, which further down doubles as "something
+  moved, redo the shadow". A zoom moves the camera and nothing else.
+- **`alCambiar` has to start the loop, not request a frame.** It was `pedirRender()`, which would
+  paint the first slice and stop there.
+
+With `prefers-reduced-motion` the slice is the whole thing — `SUAVIDAD_ZOOM` becomes 1 and the
+zoom is instant again, like the damping that `sinInercia()` already turns off.
+
 **Panning is bounded.** `limitar()` clamps `controles.target` to the furniture's bounding box
 plus 12%, and shifts the camera by the same delta so the view does not jerk — the pan simply
 stops at the edge. It runs from the `change` handler. Without it you can drag the shelf off
 into empty space and have no idea where you are.
+
+**The floor is the tilt limit, and it has to be a limit on HEIGHT rather than on degrees.**
+Tilting the view up means lowering the camera: eye height is `target.y + distance · cos(phi)`,
+so past 90° the cosine goes negative and the camera drops further the further out it is. A fixed
+cap in degrees forces a choice between two bad options — set it tight and you can barely tilt when
+close, set it loose and zooming out puts the camera under the floorboards. And under them there is
+nothing: the floor is a single-sided `PlaneGeometry`, so from below it vanishes and the room is
+left floating over a void. With the old fixed 111.6°, at the far stop the camera sat **115 units
+below the floor**.
+
+So `limitarInclinacion()` solves for the phi that puts the eye level with the boards and uses that
+as `maxPolarAngle`, recomputed on every `change`. Close in you can tilt the full 36°; as you pull
+back the cap closes toward the horizontal on its own. It also catches the case the mouse never
+touches: zooming out while already tilted down lengthens the radius and sinks the camera without
+any rotation at all, so if phi is already past the cap the camera is lifted back to it, keeping
+distance and azimuth.
+
+Two details to preserve. It reorients with `camara.lookAt` — `limitar()` can skip that because it
+moves camera and target by the same delta and the direction never changes, but this one is a
+rotation. And it must **not** call `controles.update()`: it runs inside the `change` handler and
+that would re-fire it. Touching the camera directly is safe because OrbitControls rebuilds its
+spherical from `camara.position` at the top of every `update()` — which is the same reason
+`limitar()` gets away with it.
+
+`construirHabitacion()` returns the floor's `y` for this. It is the one place that knows it, and
+both mounts pass it into `instalarNavegacion()`; the wall also calls `navegacion.limitar()` once
+at mount, so a view restored from `vistaMuro` gets corrected if the new filter left a shorter
+cabinet and the saved angle now falls through the floor.
 
 **The camera orbits; the furniture does not turn.** That is what lets the shadow map be frozen
 (`congelarSombras()`): nothing in the scene moves while you drag, so there is nothing to
@@ -383,6 +448,56 @@ The furniture stands against a back wall, with a floor below. What the planes bu
 themselves: it is the shadow, and the sense that the cabinet is somewhere. An object with
 nothing behind or beneath it does not look like it is anywhere; it looks cut out.
 
+**The light pool is what makes it a room rather than a backdrop.** A directional light has no
+falloff: it lights the metre of wall behind the cabinet exactly as hard as the wall three hundred
+units to the side. With a flat wall colour the result was a uniform black void from edge to edge,
+and *no* amount of joinery detail fixes that — the eye reads the background first, and a
+background with no gradient says "render" before you have looked at anything else.
+
+So the falloff is painted, not lit. `pintarPozo()` lays a warm halo and a dark close-down into a
+canvas; `texturaPared()` uses it at wall scale and `penumbraSuelo()` at floor scale. It costs two
+canvases, no extra light and no extra shadow map. The wall is centred on the cabinet and is never
+measured by anything, so the oval lands behind the furniture on its own.
+
+Three details that are easy to get wrong here:
+
+- **The floor's pool cannot go in the floor texture**, which tiles 26×; a vignette repeated 26
+  times is 26 vignettes. It goes on its own transparent plane just above the floor — the same
+  device `sombraDeContacto()` uses under each row of books — sized and placed to match the floor
+  exactly, so there is no edge where the darkening stops. And because the floor runs *from* the
+  wall *toward* the viewer, the clear spot sits near one edge of the canvas, not in the middle:
+  with `rotation.x = -90°`, the plane's `v = 1` falls on the wall and `v = 0` ends up behind the
+  camera.
+- **The plaster grain is a `bumpMap`, not a `map`.** The colour map is stretched once over a
+  thousand units, so anything fine painted there would come out the size of a table. Relief can
+  tile, because grain has no motif to give the repeat away.
+- **The wall is panelled, and that forced the pool onto its own plane.** One texture stretched over
+  a thousand units gives about two world units per texel at 512² — fine for a gradient, useless for
+  a moulding. Raising the resolution until a moulding is crisp means 2048², or 16 MB of GPU for the
+  backdrop, more than the rest of the scene put together, when the only thing that needs repeating
+  is one bay. So `texturaPared()` now draws a single 256×512 bay and tiles it, which puts a texel
+  at a quarter of a unit. The panel count is derived from the wall's **world width** (one bay per
+  ~54 units), never fixed, because the wall grows with the scenery and a fixed count would stretch
+  the panels every time something is added.
+  The price is that the light pool could not stay in that texture — tiled fourteen times it would
+  be fourteen pools — so it moved to `veloPared()`, a transparent plane half a unit in front. Its
+  warm halo was dropped entirely: it was painted before the scene had a lamp, and now there is a
+  real one throwing a real pool with real falloff.
+  The mouldings' light is **baked** — top and left edges dark, bottom and right bright — and that
+  is correct rather than a shortcut, because neither the wall nor the key light ever moves. Anyone
+  who changes the key's direction has to come here and flip them.
+- **The skirting board is the cheapest piece in the room and does the most.** Without it, wall and
+  floor meet along a geometrically perfect line that exists in no actual room, and the junction
+  reads as the edge of two sheets of card. It carries `texturaDesvanecida()` as its `map`: it is a
+  thousand-unit batten under a light with no falloff, so without the mask it would be a bright
+  stripe crossing the frame from edge to edge however dark you painted it.
+
+**The floor's boards run toward the viewer, not across.** Laid across the view their joints are
+straight horizontals parallel to the frame edge, which is precisely the pattern of a tiled floor —
+and that is what it looked like. Turned a quarter turn the same joints become converging lines,
+and the floor's perspective is half the depth in the scene. It is one `tex.rotation`, and it is
+the difference between a room and a diorama.
+
 **The wall spans far more than the furniture** — fourteen times its width. The demanding case
 is not the opening frame but the worst one: the camera at its furthest (1.25× the fitted
 distance, around 345 units) *and* turned to the ±30° stop. There the camera slides some
@@ -401,11 +516,102 @@ shadow gets cropped by a straight edge halfway up the wall, which looks worse th
 all. The frustum is sized from the *furniture*, not from the wall — the wall is now hundreds of
 units across and scaling the shadow camera to it would waste the whole 2048² map on empty space.
 
-**The wall and the floor go in the scene. The shelves go in a `THREE.Group` called `mueble`.**
-This is not tidiness, it is load-bearing: `encuadrarEscena()` and the pan limits in
-`instalarNavegacion()` both measure a bounding box, and measuring one that includes a 520-unit
-wall pushes the camera back until the furniture is a postage stamp and leaves the pan limits
-meaningless. Anything decorative added later goes in the scene, never in `mueble`.
+**The scene is split three ways, and which tier a thing goes in is load-bearing.**
+
+| Tier | What is in it | Who measures it |
+|---|---|---|
+| `mueble` (Group) | the bookcase: shelves + carcass | camera framing, zoom limits, pan clamp, wall placement |
+| `escenografia` (Group) | the plant, the side table | camera framing only |
+| the scene | wall, floor | nothing, ever |
+
+The wall is hundreds of units across; measuring it pushes the camera back until the furniture
+is a postage stamp and leaves the limits meaningless - so it is never measured. But the plant
+and the table are objects with real extent, and leaving them out of the framing is how they end
+up outside the opening frame where nobody sees them. Hence the middle tier: `cajaDe()` takes one
+object or several and unions their boxes, and `montarMuro()` frames on `marco = [mueble,
+escenografia]` while the pan clamp still measures `mueble` alone.
+
+**Add a piece of furniture to `escenografia`. Add a backdrop to the scene.** Never to `mueble`,
+which is what the app is actually about.
+
+**The table lamp is the second thing that made this a room** (the first is the light pool above),
+and for the same reason. A room lit by a directional light with no visible origin is a photo
+studio. The moment the lamp is in frame, the warm light coming from the left stops being a render
+setting and acquires a reason inside the picture. It carries its own `PointLight` — a shade that
+glows with no pool of light under it reads as an object painted yellow — with `distance` set, so
+the falloff that is the whole point does not wash out over the back wall. It casts **no** shadow:
+the scene's shadows come from the frozen directional light, and a second 2048² map to light one
+corner would cost as much as everything else together.
+
+Its shade is a gradient, and that is not decoration. A lit shade is never one value — the bulb is
+inside and low, so the bottom hem burns and the shoulder stays in shadow. Flat cream with the
+emissive turned up gave a blown-out white cone that was the brightest thing in the frame, and the
+brightest thing in the frame has to be a book. The gradient rides both `map` and `emissiveMap`,
+so it modulates the diffuse colour and the glow with one drawing, which is what a fabric with a
+bulb behind it actually does.
+
+**The lamp switches off**, by clicking it in the scene or from the `···` menu, and three things
+about that are load-bearing:
+
+- **The key light goes with it.** Killing only the point light would leave the room just as lit by
+  the directional and the gesture would show up in one corner. The directional *is* that lamp — it
+  is why the key is amber and comes from the left — so it drops to 22%, and the cool fill goes
+  *up*, not down: it is the only thing still lighting the room, and without that the cabinet sinks
+  into flat black.
+- **The shadow map stays frozen.** Changing a light's *intensity* does not invalidate its shadow
+  map — it is a uniform, not geometry — so `congelarSombras()` still holds and the switch costs no
+  2048² recompute. The fade therefore sets its **own** continue flag rather than the loop's `sigue`,
+  which further down doubles as "something moved, redo the shadow". Wiring it into `sigue` cost a
+  full shadow rebuild on every frame of a fade in which nothing moves.
+- **The state is module-level, like `vistaMuro`, and for the same reason**: `renderizarLibros()`
+  unmounts and remounts the wall on every keystroke, so a variable inside `montarMuro()` would be
+  lost and the lamp would switch itself back on as you type. And when the tab is hidden the fade
+  is skipped and the value applied outright — the browser stops `requestAnimationFrame` there, so
+  the fade would stall mid-way and leave the state saying "off" with the lights still at full.
+
+The `···` menu carries the same switch, and that is not decoration: a `<canvas>` does not exist for
+the keyboard or a screen reader, so without it the switch would have a mouse path only. Same rule
+as the shelf's accessible mirror. The two stay in sync through `window.gaboApp.sincronizarBotonLuz`
+— the same cycle-breaking trick `auth.js` ↔ `app.js` uses.
+
+The stack of three books next to it is the only prop in the scene that says what the room is for.
+Two things about it: they are **flat** (a book lying down is far wider than it is thick; at the
+first thickness they were blocks, and bevelled blocks are lozenges), and their colours come from
+three fixed binding hues rather than from the hash, which spread them around the whole wheel and
+produced three turquoise objects that read as a stack of plates.
+
+Two knock-on effects to keep in step, both already wired:
+
+- `construirHabitacion()` sizes the wall and the shadow frustum from the **framed** box, not
+  the cabinet. Adding decor pushes the camera back, so what used to be generous stops being
+  generous; and a plant outside the shadow frustum casts nothing, which makes it look pasted on
+  rather than standing on the floor.
+- The zoom-out recentring targets the **framed** centre. `instalarNavegacion()` takes it as
+  `centroVista`; the cabinet's own centre would leave the reset off by exactly however much the
+  decor shifts the view. The modal passes nothing and falls back to the cabinet, which is right
+  - it has no decor.
+- **The far clipping plane is computed, never hardcoded.** This one bit already: the camera was
+  born with `far = 500`, comfortable while the framing measured only the cabinet and the zoom-out
+  stop was 344 units. With the decor in the box the fitted distance went to 428 and the stop to
+  535 — past the plane. The symptom did not look like clipping, it looked like a bug: at the far
+  end of the wheel the cabinet, the wall and the table **vanished**, leaving bare floor.
+  `ajustarProfundidad()` now derives `far` from the controls' own `maxDistance` plus the scene's
+  bounding sphere, and runs right after `crearControles()` in both mounts.
+
+  It raises `near` at the same time, from 0.1 to a fraction of `minDistance`. Nothing in either
+  scene ever comes within tens of units of the eye, and a near plane that close throws away most
+  of the depth buffer — the margin it wins is what keeps two touching spines from flickering
+  over each other.
+
+  Worth knowing: the wall's corners were **already** being clipped before any of this, because
+  turned to the ±30° stop the far corner sits around 700 units out. Nobody ever saw it, because
+  the wall is near-black against a near-black page. Any future change that moves the camera back
+  — more decor, a wider fit, a looser zoom limit — must keep this function in the loop rather
+  than re-tuning a constant.
+
+The framing margin is 1.03, not the old 1.10. Once the decor is in the box it is the **width**
+that drives the fit, and the loose margin left a band of empty wall above and below with the
+cabinet small in the middle.
 
 `tocado()` can keep raycasting the whole scene: it walks up parents looking for `libroId` or
 `esBalda` and finds neither on a wall. For the wheel it is an improvement — pointing at empty
@@ -428,10 +634,157 @@ glancing angle, so with the same colour the floor lights up far brighter and rea
 ledge under the cabinet. It is darkened on its own rather than by dimming the whole scene, and
 it sits well below the bottom shelf — close up it just looked like one more plank.
 
+**The floor is a plank floor, not a flat colour.** `texturasSuelo()` draws one tile of boards in
+a running bond and returns it twice - in colour as `map`, in grey as `bumpMap`, so the joint
+between boards actually sinks instead of being a painted line. Two things about it are worth
+knowing before touching it:
+
+- **Proportion is what separates a wood floor from tiling.** The first pass used five rows of
+  two boards each, which is 2.5:1, and the result read as paving slabs. A real board is nearer
+  9:1: one board per row, nine rows. `REPETICION_SUELO` (26) then sets how often the tile
+  repeats across a plane that is over a thousand units wide.
+- **The floor is the one room surface that wants a sheen.** It skips the room's matte 0.94 for
+  roughness 0.56 and `envMapIntensity` 0.38, because reflecting the lamp instead of swallowing
+  it is half of what makes a floor read as a floor. It still has to stay quieter than the
+  furniture, so its `map` is multiplied down by `color`.
+
 **The room must stay quieter than the furniture.** Wall and floor set `envMapIntensity` to 0.12
 and mark `userData.entornoFijo`, which `ajustarEntorno()` honours — that pass runs after the
 room is built and used to overwrite the setting, leaving a wall that lit up brighter than the
 cabinet it was supposed to sit behind.
+
+### The plant
+
+A **ficus lyrata**: a bare woody trunk and a dozen large, entire leaves.
+
+It was a monstera for two passes, and the reason that failed is the most portable lesson in this
+file. A monstera's identity lives in its **filigree** — deep lobes, fenestrations, a heavily
+indented outline. At the size this plant actually renders, filigree does not read as filigree; it
+reads as a dirty edge. Each pass made the shape more botanically correct and each pass still came
+out looking like a paper cut-out.
+
+The fiddle-leaf fig works because it goes the other way: its silhouette is a few big **smooth**
+paddles on a naked stem. There is no fine detail to lose at distance, because there is no fine
+detail. And the contrast between bare trunk and broad crown survives at any size, which is the
+whole job of a background object.
+
+**The rule, for next time: at this scale choose a plant for its mass and overall outline, never
+for the detail of its leaf.** A palm or a fern — dozens of small leaflets — would fail for exactly
+the reason the monstera failed, and cost far more geometry doing it.
+
+The leaf is a `THREE.Shape`: an **obovate** width profile — widest past the middle, blunt at both
+ends — then `ShapeGeometry`, then curvatures applied by hand to the vertices: the droop toward the
+tip, which is weight; the channel along the midrib, which is how a big leaf holds itself up; a
+gentle undulation of the margin; and a slight twist, because no leaf lies in a plane. A flat leaf
+is a paper cut-out.
+
+Four things here were each got wrong once, and each is a trap worth naming:
+
+- **Do not model the violin.** The plant's name invites a waist, and the first attempt built one
+  by summing two gaussian lobes, a small one at the base and a broad one at the apex. Marked
+  enough to be visible, the leaf stops reading as a leaf and reads as two lobes stuck together —
+  an oak. A real fiddle-leaf's waist is a hint. Here it is 11% off a single bell.
+- **The margin's ripple must die out at both ends.** A sine wave landing near `t = 1` bites the
+  tip and leaves it serrated — which is exactly how these went from ficus to maple. It is
+  multiplied by `sin(πt)`.
+- **The second argument of `geometriaHoja` is the HALF-width.** The outline is drawn at ±`borde`,
+  so the total is twice that. It sat at `largo * 0.62` for a while — leaves **wider than they were
+  long**, which came out circular and turned the fig into a jade plant. A fiddle-leaf runs about
+  1.6:1, so the half-width is ~0.29 of the length.
+- **The undulation is in the surface, not just the outline.** Notching the edge while leaving the
+  surface flat gives a saw blade. Rippling the surface makes each trough catch the lamp
+  differently, which is what gives the paddle any relief at all. It grows with r² so the midrib
+  stays put — and at the first amplitude (0.22 of the width) it curled the leaves into tacos. It
+  is 0.07.
+
+The two sides of every leaf get different wave phases, and the leaves get their length, roll and
+tone from `hashEstante`, never `Math.random()` — the same reason as the books: the wall is rebuilt
+on every keystroke.
+
+**The venation rides two maps from one drawing.** As `map` it can only darken — `map` multiplies —
+so the canvas is mid-grey with **white** veins, and what reads is the blade dropping a stop while
+the veins stay put: pale venation on dark green, which is the plant's signature. As `bumpMap` it
+gives the leaf a surface. That second half matters more than it sounds: a painted-only venation is
+a decal on a perfectly smooth paddle, and it looks like one. It is also what let the gloss come
+back up — the leaves had been dulled to 0.62 roughness because they looked like plastic, but the
+problem was never that they shone, it was that they shone *flat*, with one highlight sweeping the
+whole paddle. Broken up by the bump, a leathery sheen is fine.
+
+Veins are neither evenly spaced nor uniform — at a fixed pitch and width the venation reads as a
+comb, which is the first thing that gives it away as a drawing — and each one is stroked in
+segments that thin and fade toward the margin, which is the second.
+
+**`ShapeGeometry`'s UVs are not normalised, and this one bit for a long time.** Its source says so
+in a comment — `uvs.push( vertex.x, vertex.y ); // world uvs` — so `u` runs from 0 to the leaf's
+length in world units, about 25, not 0 to 1. With the default ClampToEdge wrapping, the whole leaf
+except a one-unit strip by the petiole was painted with the **last column of pixels** of the
+canvas. The venation was not subtle, it was not being drawn. `geometriaHoja()` now divides through
+by `largo` and `2 * ancho` before subdividing. Anything else that reaches for `ShapeGeometry` has
+to do the same.
+
+**`ShapeGeometry` does not tessellate the interior** either, and that is why `subdividirMalla()`
+exists.
+It triangulates the polygon from the outline vertices and nothing else, so the middle of a leaf is
+a handful of enormous triangles. However fine the curvature applied afterwards, the shading is
+interpolated in a straight line across half a leaf and what you see is facets — the plant looked
+folded out of paper. Two midpoint subdivisions (each triangle into four) fix it: about 2,800
+triangles a leaf, 36,000 for the whole plant, built in 8.6 ms. That is a lot for a background
+object and it is still fine, because there is no render loop — but it is the one place in the
+scene where a careless change gets expensive. It must run **before** the vertices are displaced:
+subdividing an already-curved mesh only splits the facets that are already there.
+
+**The trunk is half the silhouette**, and it is built as a `CylinderGeometry` whose axis is then
+displaced by a smooth function of height. A perfectly straight trunk reads as a broom handle; the
+S-bend costs one loop. The leaves hang off it by short petioles over its top three quarters, at
+the golden angle, opening and drooping low down and tucking upright at the top — that is what
+makes a crown instead of a wheel.
+
+The pot is a `LatheGeometry` profile, not a cylinder: the belly and the lip are what read as
+terracotta. Everything varies through `hashEstante`, never `Math.random()`, for the same reason
+as the books - the wall is rebuilt on every keystroke and a plant that reshuffles itself while
+you type is worse than no plant.
+
+The plant is positioned **by the edge of its canopy, not by its centre**: the outermost leaf
+reaches its stem radius plus its own length, and placed by centre it swung in front of the
+bottom shelf and covered that shelf's label. Those labels are the only place the wall names a
+theme, so nothing may overlap them.
+
+That clearance (`vueloCopa`) is the longest petiole plus the longest leaf, times the cosine of the
+angle they leave the trunk at, and **every one of those numbers lives in `construirPlanta()` while
+the clearance is computed in `construirEscenografia()`** — so they have to be moved together.
+Every time a leaf has grown and this has been left behind, the canopy has ended up in front of the
+bottom shelf, over its label.
+
+### Colours the 3D reads are LINEAR — and `colorMaterial()` is where that is paid
+
+three r147 runs with `ColorManagement.legacyMode`, so `new THREE.Color('#1B3922')` does **no**
+sRGB-to-linear conversion: the hex goes straight in as a linear value and the renderer's
+`outputEncoding` then applies gamma on the way out. A hex that looks like a deep forest green in
+a swatch comes out of the render as pale sage.
+
+This was, for a while, the single most expensive defect in the scene, and it did not look like a
+colour bug — it looked like the render was unfinished. Every hand-written material colour came
+out one to two stops lighter and more washed than written: the cabinet's **edge** was paler than
+its own shelves, the terracotta pot was salmon, the leaves were mint, and the spines read as
+boiled sweets rather than cloth. Nothing about the modelling was wrong; everything was a stop
+and a half too bright.
+
+It was compensated for by writing the tokens pre-raised (`--planta-hoja` was `#081C0C` so that
+it would render as `#3E6B4A`), which left `:root` full of hexes that looked like nothing and put
+the burden on whoever picked the next colour.
+
+**Now the conversion lives in one function.** `colorMaterial(nombre, respaldo)` reads the token
+and calls `.convertSRGBToLinear()`. The tokens are real colours again — what you see in a swatch
+is what renders — and `colorLomo()` ends with the same conversion, which is why its lightness
+band could be stated in plain sRGB terms (0.30–0.62).
+
+**The other half of the rule: this applies only where the colour feeds a material.** Colours that
+end up drawn into a `<canvas>` — the wall gradient, the floor boards, the paper edges — travel in
+a texture flagged `sRGBEncoding`, which the renderer already decodes. Converting those would
+darken them twice. So: `material.color` → `colorMaterial()`; `ctx.fillStyle` → the raw token.
+
+The scenography colours are decoration, not data: unlike `--leido` / `--leyendo` / `--pendiente`
+they encode nothing, so they do not go through the `dataviz` validator.
 
 ### Spine thickness, and the data it does not have
 
@@ -481,6 +834,28 @@ large theme — and a spine draws about 20px wide even in the modal. When titles
 the cause was the UV mapping above, never the resolution.
 
 Opening the largest theme costs about 50 ms and closing about 60 ms.
+
+The floor adds two cached 1024-square canvases (colour and relief) and the leaf veining one
+256-square, shared by every leaf - the plant builds no per-leaf texture at all. The room adds
+five more, all cached and all small: the wall's 256x512 panel bay, a 128-square plaster grain, the
+wall's 512-square veil, the floor's 1024-square penumbra, and two one-dimensional strips (the
+skirting's fade mask and the lampshade's gradient) that are four pixels wide.
+
+**Everything in here is rebuilt on every keystroke**, because `renderizarLibros()` unmounts and
+remounts, and `destruir()` empties the texture cache. So a texture's build cost is a per-keystroke
+cost, and that is the budget to think in — not video memory. The plaster grain was first drawn
+with a per-pixel noise loop over 256², which cost 12 ms of `getImageData`/`putImageData` every
+time and was **invisible**: tiled 22× across a thousand units of wall, one texel fell below one
+screen pixel. It is now drawn with canvas rectangles at two scales and tiled 8×, which is both
+0.4 ms and actually visible. A whole wall mount is about 65 ms.
+
+The corollary for anything added later: if a texture needs per-pixel work, check first whether its
+tiling puts that detail above one screen pixel. If it does not, it is not detail, it is cost.
+
+**`destruir()` frees every texture slot, not just `map`.** It walks `MAPAS_MATERIAL`, which
+exists because the floor introduced the first `bumpMap` in the project and the old one-line
+disposal would have leaked it silently. Anything added later with a normal or roughness map is
+covered by the same list.
 
 ### Accessibility is not optional here
 

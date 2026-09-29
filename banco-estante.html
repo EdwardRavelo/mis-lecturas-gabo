@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<!--
+  BANCO DE PRUEBAS DEL ESTANTE 3D
+
+  La escena solo se ve dentro de la app, y la app pide sesión de Supabase: para
+  mirar un cambio de luz o de madera había que entrar con GitHub y esperar a
+  que cargara la biblioteca entera. Esta página monta el mueble directamente
+  con datos inventados, así que se abre y ya está.
+
+      node servidor.js . 8000
+      http://localhost:8000/banco-estante.html          -> el muro
+      http://localhost:8000/banco-estante.html?modal=1  -> una balda abierta
+
+  ESTO NO ES LA APP, y conviene tenerlo claro antes de dar algo por roto: aquí
+  no hay modales, ni fichas, ni Supabase. Carga cuatro CDN y estante3d.js, y
+  nada más. Pulsar un libro en la app abre #edit-modal, que vive en index.html
+  y lo dispara app.js; aquí lo único que hay al otro lado del clic es el
+  cuadro de la esquina, que existe precisamente para que se vea que el
+  raycaster funciona.
+
+  No es código de la app: nadie la enlaza y no entra en index.html. Si estorba,
+  se borra sin consecuencias.
+-->
+<html lang="es"><head><meta charset="UTF-8">
+<title>Banco de pruebas del estante 3D</title>
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/estante.css">
+<style>
+  body { margin: 0; background: var(--plano); font-family: var(--fuente-texto); }
+  #caja { position: relative; width: 100vw; height: 100vh; }
+
+  /* El cuadro de la esquina: lo que en la app sería el modal. */
+  #ficha {
+    position: fixed; top: 16px; left: 16px; z-index: 10;
+    width: 268px; padding: 14px 16px;
+    background: var(--superficie); border: 1px solid var(--borde);
+    border-radius: 10px; color: var(--tinta);
+    font-size: 0.82rem; line-height: 1.5;
+    box-shadow: 0 14px 40px rgba(0,0,0,0.5);
+  }
+  #ficha h1 {
+    margin: 0 0 2px; font-family: var(--fuente-titulo);
+    font-size: 1rem; font-weight: 600;
+  }
+  #ficha .aviso {
+    margin: 0 0 10px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--borde);
+    color: var(--tinta-suave); font-size: 0.74rem;
+  }
+  #ficha dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+  #ficha dt { color: var(--tinta-tenue); font-size: 0.72rem; text-transform: uppercase;
+              letter-spacing: 0.04em; align-self: center; }
+  #ficha dd { margin: 0; }
+  #ficha .vacio { color: var(--tinta-suave); font-style: italic; }
+  #ficha .punto { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                  margin-right: 6px; vertical-align: -1px; }
+</style>
+</head><body>
+<div id="caja"><div id="estante-raiz" style="position:relative;width:100%;height:100%"></div></div>
+
+<aside id="ficha">
+  <h1>Banco de pruebas</h1>
+  <p class="aviso">No es la app: aquí no hay modales ni datos reales. Pulsa un
+     libro o una balda y sale abajo lo que devuelve el raycaster.</p>
+  <div id="ficha-cuerpo"><p class="vacio">Nada seleccionado.</p></div>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/geometries/RoundedBoxGeometry.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+<script src="js/estante3d.js"></script>
+<script>
+const TEMAS = [
+  { id:'t1', nombre:'Literatura', color:'#BF8550', n:17 },
+  { id:'t2', nombre:'Ingeniería de datos', color:'#6E8FD6', n:24 },
+  { id:'t3', nombre:'Historia', color:'#C07E24', n:9 },
+  { id:'t4', nombre:'Filosofía', color:'#9184DC', n:13 },
+  { id:'sin-tema', nombre:'Sin tema', color:'#928C81', n:6 }
+];
+const ESTADOS = ['Leído','Leyendo','Pendiente'];
+const TIPOS = ['Libro','Curso','Documentación','Vídeo','Artículo'];
+
+const baldas = TEMAS.map(t => ({
+  id:t.id, nombre:t.nombre, color:t.color,
+  libros: Array.from({length:t.n}, (_,i) => ({
+    id: t.id+'-'+i,
+    titulo: 'Título de prueba número '+(i+1),
+    autor: 'Autor Apellido',
+    tipo: TIPOS[i % TIPOS.length],
+    año: 1967 + (i * 7) % 56,
+    paginas: i % 3 === 0 ? 120 + i*37 : null,
+    estado: ESTADOS[(i + t.n) % 3]
+  }))
+}));
+
+const porId = new Map();
+baldas.forEach(b => b.libros.forEach(l => porId.set(l.id, { libro: l, tema: b })));
+
+const cuerpo = document.getElementById('ficha-cuerpo');
+const escapar = t => String(t).replace(/[&<>"]/g, c =>
+  ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+
+function filas(pares) {
+  return '<dl>' + pares
+    .filter(([, v]) => v !== null && v !== undefined && v !== '')
+    .map(([k, v]) => '<dt>' + escapar(k) + '</dt><dd>' + v + '</dd>')
+    .join('') + '</dl>';
+}
+
+function mostrarLibro(id) {
+  const encontrado = porId.get(id);
+  if (!encontrado) { cuerpo.innerHTML = '<p class="vacio">Sin datos para ' + escapar(id) + '</p>'; return; }
+  const { libro: l, tema } = encontrado;
+  const color = { 'Leído':'--leido', 'Leyendo':'--leyendo', 'Pendiente':'--pendiente' }[l.estado];
+  cuerpo.innerHTML = filas([
+    ['Título', escapar(l.titulo)],
+    ['Autor', escapar(l.autor)],
+    ['Tema', '<span class="punto" style="background:' + tema.color + '"></span>' + escapar(tema.nombre)],
+    ['Tipo', escapar(l.tipo)],
+    ['Año', l.año],
+    ['Páginas', l.paginas ?? '<span class="vacio">sin dato</span>'],
+    ['Estado', '<span class="punto" style="background:var(' + color + ')"></span>' + escapar(l.estado)],
+    ['id', '<code>' + escapar(l.id) + '</code>']
+  ]);
+}
+
+function mostrarTema(id) {
+  const b = baldas.find(x => x.id === id);
+  if (!b) return;
+  cuerpo.innerHTML = filas([
+    ['Balda', '<span class="punto" style="background:' + b.color + '"></span>' + escapar(b.nombre)],
+    ['Lecturas', b.libros.length],
+    ['id', '<code>' + escapar(b.id) + '</code>']
+  ]) + '<p class="aviso" style="margin:10px 0 0;border:0;padding:0">' +
+       'En la app esto abriría #estante-modal.</p>';
+}
+
+window.addEventListener('load', () => {
+  const raiz = document.getElementById('estante-raiz');
+  let ok;
+  if (location.search.includes('modal')) {
+    const t = TEMAS[1];
+    const libros = baldas[1].libros.map((l, i) => ({ ...l, subtema: i < 12 ? 'SQL' : 'Modelado' }));
+    porId.clear();
+    libros.forEach(l => porId.set(l.id, { libro: l, tema: baldas[1] }));
+    ok = montarEstanteModal(raiz, t, libros, mostrarLibro);
+  } else {
+    ok = montarMuro(raiz, baldas, mostrarTema, mostrarLibro, () => {});
+  }
+  console.log('[banco] montado:', ok);
+});
+</script>
+</body></html>

@@ -1576,6 +1576,18 @@ function alternarMenu() {
 // ========================================
 // Event listeners
 // ========================================
+// Deja el botón del menú contando lo mismo que la escena. Se llama al pulsarlo
+// y también después de cada render, porque la lámpara se puede haber apagado
+// pulsandola en 3D y el menú no se entera de eso por su cuenta.
+function sincronizarBotonLuz(encendida) {
+    const boton = document.getElementById('btn-luz');
+    const texto = document.getElementById('btn-luz-texto');
+    if (!boton || !texto) return;
+    boton.setAttribute('aria-pressed', String(encendida));
+    texto.textContent = encendida ? 'Apagar la lámpara' : 'Encender la lámpara';
+    boton.classList.toggle('apagada', !encendida);
+}
+
 function inicializarEventListeners() {
     if (eventListenersInicializados) return;
     eventListenersInicializados = true;
@@ -1712,6 +1724,14 @@ function inicializarEventListeners() {
     document.getElementById('libro-form')?.addEventListener('submit', guardarLibro);
     document.getElementById('btn-borrar-libro')?.addEventListener('click', borrarLibro);
 
+    // La habitación: el interruptor de la lámpara. La escena también la
+    // apaga al pulsarla, pero eso vive dentro del <canvas>, que no existe para
+    // el teclado: este botón es el único camino accesible.
+    document.getElementById('btn-luz')?.addEventListener('click', () => {
+        if (typeof alternarLuzLampara !== 'function') return;
+        sincronizarBotonLuz(alternarLuzLampara());
+    });
+
     // Respaldo
     document.getElementById('btn-exportar')?.addEventListener('click', exportarDatos);
     const btnImportar = document.getElementById('btn-importar');
@@ -1752,5 +1772,8 @@ window.gaboApp = {
     importarDatos,
     actualizarInterfaz,
     inicializarEventListeners,
-    montarFondoLogin
+    montarFondoLogin,
+    // La escena 3D la llama cuando la lámpara se apaga pulsandola en el
+    // canvas: el botón del menú no se enteraría por su cuenta.
+    sincronizarBotonLuz
 };

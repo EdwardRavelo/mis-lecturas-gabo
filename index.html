@@ -195,6 +195,19 @@
             </div>
 
             <div class="menu-seccion">
+                <span class="menu-titulo">La habitación</span>
+                <!-- La lámpara también se pulsa en la escena, pero un <canvas> no
+                     existe para el teclado ni para el lector de pantalla: sin este
+                     botón el interruptor solo tendría camino de ratón. Misma regla
+                     que el espejo accesible del estante. -->
+                <button class="menu-accion" type="button" id="btn-luz"
+                        aria-pressed="true">
+                    <span class="menu-accion-icono" aria-hidden="true">●</span>
+                    <span id="btn-luz-texto">Apagar la lámpara</span>
+                </button>
+            </div>
+
+            <div class="menu-seccion">
                 <span class="menu-titulo">Respaldo</span>
                 <button class="menu-accion" type="button" id="btn-exportar">
                     <span class="menu-accion-icono" aria-hidden="true">↓</span> Exportar
