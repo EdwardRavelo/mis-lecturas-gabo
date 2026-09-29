@@ -142,8 +142,8 @@
     --alto-banner: 48px;
 
     /* Alturas del chrome nuevo, que el shell necesita para repartirse */
-    --alto-topbar: 80px;
-    --alto-nav: 54px;
+    /* La barra y el nav se fueron con el rediseño: la escena es la ventana.
+       Solo sobrevive el ancho de la ficha, que ahora flota sobre ella. */
     --ancho-ficha: 310px;
 }
 
@@ -215,25 +215,14 @@ img { max-width: 100%; display: block; }
 }
 
 /* ----------------------------------------
-   Barra superior
-   ---------------------------------------- */
+   Piezas heredadas de la barra
+   ----------------------------------------
+   La barra superior ya no existe: la escena ocupa la ventana entera y lo que
+   la barra llevaba se mudó al menú, que abre la mesa de la habitación. Lo que
+   queda aquí son las piezas que siguen usándose ahí dentro —la marca, las
+   pastillas de estado, los botones de icono— y nada más. */
 
-.topbar {
-    flex: 0 0 auto;
-    min-height: var(--alto-topbar);
-    padding: 14px clamp(20px, 3vw, 48px);
-    display: flex;
-    align-items: center;
-    gap: 28px;
-    border-bottom: 1px solid var(--borde);
-    background: rgba(16, 15, 13, 0.86);
-    /* backdrop-filter solo en elementos que no scrollean: esta barra es fija */
-    backdrop-filter: blur(16px);
-    position: relative;
-    z-index: 10;
-}
-
-.brand { display: flex; align-items: center; gap: 12px; min-width: 222px; }
+.brand { display: flex; align-items: center; gap: 12px; }
 
 .brand-mark {
     width: 42px;
@@ -273,8 +262,6 @@ img { max-width: 100%; display: block; }
 .status-dot.reading { color: var(--leyendo); background: currentColor; }
 .status-dot.pending { color: var(--pendiente); background: currentColor; }
 
-.top-actions { display: flex; align-items: center; gap: 8px; }
-
 .icon-button {
     width: 40px;
     height: 40px;
@@ -292,7 +279,12 @@ img { max-width: 100%; display: block; }
 .icon-button.quiet { background: transparent; color: var(--tinta-suave); }
 .icon-button.quiet:hover { background: #27251F; color: var(--tinta); }
 
-.topbar svg, .category-nav svg, .book-detail svg {
+/* Los iconos de trazo. El selector iba por .topbar y .category-nav, y al
+   quitarlos los iconos que se mudaron al menú se quedaron sin regla: un <svg>
+   sin `fill:none` pinta relleno por defecto, así que la lupa y la equis
+   salían como manchas negras redondas. Ahora va por el menú, que es donde
+   viven. */
+.menu-panel svg, .book-detail svg {
     width: 18px;
     height: 18px;
     fill: none;
@@ -302,26 +294,8 @@ img { max-width: 100%; display: block; }
     stroke-linejoin: round;
 }
 
-.add-button {
-    min-height: 40px;
-    padding: 0 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 0 0 auto;
-    border: 0;
-    border-radius: 999px;
-    color: #1A140F;
-    background: linear-gradient(135deg, var(--ambar-claro), var(--ambar-hondo));
-    font-size: 13px;
-    font-weight: 700;
-    box-shadow: 0 8px 24px rgba(126, 76, 37, 0.2);
-    transition: filter var(--transicion), transform var(--transicion);
-}
-
-.add-button:hover:not(:disabled) { filter: brightness(1.08); }
-.add-button:active:not(:disabled) { transform: scale(0.97); }
-.add-button:disabled { opacity: 0.38; cursor: not-allowed; }
+/* (El botón «Añadir libro» pasó a ser una .menu-accion más del menú,
+   además de la pila de libros de la mesa.) */
 
 /* El buscador se despliega: en reposo es solo la lupa */
 .search-box {
@@ -341,26 +315,10 @@ img { max-width: 100%; display: block; }
    Colecciones
    ---------------------------------------- */
 
-.category-nav {
-    flex: 0 0 auto;
-    min-height: var(--alto-nav);
-    padding: 0 clamp(20px, 3vw, 48px);
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    border-bottom: 1px solid var(--borde);
-    background: #141310;
-}
-
-.nav-intro { display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
-             color: #C1B9AD; font-size: 12px; font-weight: 600; }
-.nav-intro svg { width: 15px; height: 15px; }
-
 .category-list {
     display: flex;
     align-items: stretch;
     gap: 24px;
-    height: var(--alto-nav);
     overflow-x: auto;
     scrollbar-width: none;
 }
@@ -380,57 +338,68 @@ img { max-width: 100%; display: block; }
 .category-list button:hover,
 .category-list button.active { color: var(--tinta); border-bottom-color: #B97E4C; }
 
-.category-nav > p { margin: 0 0 0 auto; flex: 0 0 auto; white-space: nowrap;
+#cuenta-visibles { margin: 0; white-space: nowrap;
                     color: var(--tinta-tenue); font-size: 11px; }
 
 /* ----------------------------------------
    La sala
    ---------------------------------------- */
 
+/* La sala es TODA la ventana. Se acabaron la rejilla de dos columnas, el
+   relleno y los huecos: no hay nada al lado con lo que repartirse el sitio.
+
+   El `padding: 0` no es descuido. El encuadre de la escena ya deja su propio
+   margen —encuadrarEscena() con 1.03— y ese margen es de la CÁMARA, así que
+   respira igual al girar y al acercarse. Un relleno en CSS, en cambio, es un
+   marco muerto: recorta el lienzo y deja un borde que no participa de nada. */
 .library-room {
     flex: 1 1 auto;
     /* min-height: 0 o el hijo flex se niega a encoger y desborda el shell */
     min-height: 0;
-    padding: 44px clamp(20px, 5vw, 88px) 44px;
-    display: grid;
-    grid-template-columns: minmax(420px, 1fr) var(--ancho-ficha);
-    gap: clamp(28px, 5vw, 80px);
     position: relative;
     overflow: hidden;
 }
 
-.ambient-light {
-    position: absolute;
-    inset: -20% 10% auto;
-    height: 70%;
-    pointer-events: none;
-    background: radial-gradient(ellipse at center top, rgba(194, 143, 92, 0.09), transparent 65%);
-}
-
-.shelf-column {
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    z-index: 1;
-}
+/* (.ambient-light se fue: era un halo cálido en CSS sobre la sala, y al pasar
+   el lienzo a ocupar la sala entera quedó debajo de él y dejó de verse. El
+   halo que se ve ahora es el de la escena, que lo pinta la lámpara.) */
 
 /* ----------------------------------------
    Ficha lateral
    ---------------------------------------- */
 
+/* La ficha FLOTA sobre la escena, y solo existe mientras haya libro elegido:
+   app.js le pone y le quita el atributo `hidden`. Antes era una columna fija
+   de 310px que no se podía esconder —un hueco en blanco de ese ancho se lee
+   como un fallo—, y por eso tenía que explicar para qué servía. Flotando el
+   problema desaparece: cuando no hay nada que enseñar, no hay panel.
+
+   Va translúcida y con desenfoque a propósito: tapa una esquina de la
+   habitación y conviene que se note que hay habitación debajo. */
 .book-detail {
-    align-self: start;
-    padding: 28px;
-    position: relative;
-    z-index: 2;
-    max-height: 100%;
+    position: absolute;
+    top: clamp(16px, 2.5vh, 32px);
+    right: clamp(16px, 2.5vw, 32px);
+    z-index: 20;
+    width: min(var(--ancho-ficha), calc(100vw - 32px));
+    max-height: calc(100% - clamp(32px, 5vh, 64px));
     overflow-y: auto;
+    padding: 28px;
     border: 1px solid var(--borde);
     border-radius: var(--radio-lg);
-    background: rgba(28, 27, 23, 0.78);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
-    backdrop-filter: blur(18px);
+    background: rgba(24, 23, 19, 0.82);
+    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(20px);
+    animation: ficha-entra 0.22s ease-out;
+}
+
+@keyframes ficha-entra {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .book-detail { animation: none; }
 }
 
 .detail-close {
@@ -533,66 +502,102 @@ img { max-width: 100%; display: block; }
 .detail-action svg { width: 15px; height: 15px; }
 
 /* ========================================
-   Menú "···"
+   El menú
    ========================================
-   Todo lo que antes ocupaba la barra lateral vive aquí dentro: búsqueda,
-   filtro por estado, alta de temas y lecturas, respaldo y sesión. En reposo
-   la pantalla es solo el mueble; el menú es un gesto de dos pasos, que es
-   exactamente el trato que se aceptó al quitar el panel. */
+   Lo abre la MESA de la habitación. Ya no es el desplegable de un botón ··· de
+   la barra —no hay barra— sino la única puerta a buscar, filtrar, las
+   colecciones, dar de alta, la luz, el respaldo y la sesión. Eso es un
+   diálogo, con todo lo que implica: centrado y con velo de verdad.
 
-.menu-btn {
-    position: absolute;
-    top: var(--esp-md);
-    right: var(--esp-md);
-    z-index: 60;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    border: 1px solid var(--borde);
-    border-radius: 50%;
-    background: var(--superficie);
-    color: var(--tinta-suave);
-    font-size: 1.1rem;
-    line-height: 1;
-    letter-spacing: 0.08em;
-    box-shadow: var(--luz-filo), var(--sombra-baja);
-    transition: background var(--transicion), color var(--transicion),
-                transform var(--transicion);
-}
+   En reposo la pantalla es solo la habitación. */
 
-.menu-btn:hover {
-    background: var(--superficie-alta);
-    color: var(--tinta);
-}
-
-/* Se hunde al pulsar, como una tecla */
-.menu-btn:active { transform: scale(0.94); }
-
-.menu-btn[aria-expanded="true"] {
-    background: var(--superficie-alta);
-    color: var(--tinta);
-    border-color: var(--tema-acento);
-}
-
-/* Velo que captura el click fuera. Sin fondo visible: el menú no es un modal,
-   no debe oscurecer el mueble que estás mirando. */
+/* Velo. Ahora SÍ oscurece: cuando el menú era un desplegable de esquina no
+   debía tapar el mueble que estabas mirando, pero un diálogo que se lleva toda
+   la atención de la app tiene que atenúar lo que hay detrás. */
 .menu-velo {
     position: fixed;
     inset: 0;
     z-index: 55;
-    background: transparent;
+    background: rgba(8, 7, 6, 0.55);
+    backdrop-filter: blur(3px);
 }
 
+/* Cabecera del menú: la marca vive aquí desde que no hay barra que la lleve. */
+.menu-cabecera {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--esp-md);
+}
+
+.menu-cabecera .brand-name { font-size: 1.05rem; }
+
+/* El buscador y las colecciones vienen de la barra y del nav, donde eran
+   horizontales y se plegaban. Aquí el menú es una columna y tienen que
+   ocuparla: dentro de un diálogo que se ha abierto para buscar, un campo que
+   empieza con ancho cero y hay que desplegar no tiene ningún sentido. */
+.menu-panel .search-box {
+    width: 100%;
+    padding: 0 6px 0 12px;
+    background: var(--superficie-honda);
+    border: 1px solid var(--borde);
+}
+.menu-panel .search-box input {
+    flex: 1 1 auto;
+    width: auto;
+    padding: 10px 0;
+    font-size: 13px;
+}
+/* La lupa se queda de adorno: aquí no pliega nada. */
+.menu-panel .search-box .icon-button {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    background: none;
+    color: var(--tinta-tenue);
+    pointer-events: none;
+}
+
+.menu-panel .status-filters {
+    display: flex;
+    flex-direction: column;
+    gap: var(--esp-xs);
+}
+.menu-panel .status-pill { justify-content: flex-start; width: 100%; }
+.menu-panel .status-pill strong { margin-left: auto; }
+
+.menu-panel .category-list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--esp-xs) var(--esp-md);
+    height: auto;
+    overflow: visible;
+}
+
+/* El botón de cerrar del menú: en la barra los iconos iban sobre un fondo
+   propio, y aquí sin él se perdía sobre la superficie del panel. */
+#menu-cerrar {
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--borde);
+    background: var(--superficie-honda);
+    color: var(--tinta-suave);
+}
+#menu-cerrar:hover { color: var(--tinta); border-color: var(--borde-fuerte); }
+
+/* El velo ya no es transparente: el menú dejó de colgar de un botón de una
+   barra y pasó a ser la única puerta a buscar, filtrar, dar de alta, respaldar
+   y cerrar sesión. Eso es un diálogo, y un diálogo atenúa lo que hay detrás. */
 .menu-panel {
-    position: absolute;
-    top: calc(var(--esp-md) + 48px);
-    right: var(--esp-md);
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     z-index: 60;
-    width: min(320px, calc(100vw - 2 * var(--esp-md)));
-    max-height: min(78dvh, 720px);
+    width: min(380px, calc(100vw - 2 * var(--esp-md)));
+    max-height: min(86dvh, 820px);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -626,44 +631,9 @@ img { max-width: 100%; display: block; }
     color: var(--tinta-tenue);
 }
 
-.menu-buscar {
-    width: 100%;
-    padding: 0.55rem 0.75rem;
-    border: 1px solid var(--borde);
-    border-radius: var(--radio-md);
-    background: var(--superficie-honda);
-    color: var(--tinta);
-    font-size: 0.88rem;
-    transition: border-color var(--transicion);
-}
-
-.menu-buscar::placeholder { color: var(--tinta-tenue); }
-.menu-buscar:focus { outline: none; border-color: var(--tema-acento); }
-
-.menu-filtros {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--esp-xs);
-}
-
-.menu-filtro {
-    padding: 0.4rem 0.5rem;
-    border: 1px solid var(--borde);
-    border-radius: var(--radio-sm);
-    background: transparent;
-    color: var(--tinta-suave);
-    font-size: 0.78rem;
-    transition: background var(--transicion), color var(--transicion),
-                border-color var(--transicion);
-}
-
-.menu-filtro:hover { background: var(--superficie-alta); color: var(--tinta); }
-
-.menu-filtro.active {
-    background: var(--superficie-alta);
-    border-color: var(--tema-acento);
-    color: var(--tinta);
-}
+/* (.menu-buscar y .menu-filtro* eran de un menú anterior y ya no las usaba
+   nadie. El buscador y los filtros de ahora son .search-box y .status-pill,
+   que vienen de la barra.) */
 
 .menu-accion {
     display: flex;
@@ -865,7 +835,6 @@ img { max-width: 100%; display: block; }
    separadores sueltos: se colapsan solos. */
 .modal-meta > span:empty { display: none; }
 
-.separator { opacity: 0.4; }
 
 .modal-body {
     flex: 1;
@@ -1454,25 +1423,28 @@ body.con-banner .library-layout {
    poco más. El propio estante trae sus cortes en css/estante.css. */
 
 @media (max-width: 1024px) {
-    #estante-raiz { padding: var(--esp-md); }
     .modal-columnas { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
-    /* Ya no existe la cabecera móvil: no había cajón lateral que abrir, así
-       que el shell vuelve a ser la ventana entera. */
-    #estante-raiz { padding: var(--esp-sm); }
+    /* La escena va a sangre en TODOS los tamaños. Aquí había un `padding` en
+       #estante-raiz que la separaba del borde; con la escena convertida en la
+       aplicación entera eso solo devuelve el marco que se acaba de quitar. */
 
-    .menu-btn {
-        top: var(--esp-sm);
+    /* En una pantalla estrecha la ficha flotante taparía media habitación, así
+       que se acuesta abajo: el mueble se mira arriba y se lee debajo. */
+    .book-detail {
+        top: auto;
         right: var(--esp-sm);
+        left: var(--esp-sm);
+        bottom: var(--esp-sm);
+        width: auto;
+        max-height: 52dvh;
     }
 
     .menu-panel {
-        top: calc(var(--esp-sm) + 48px);
-        right: var(--esp-sm);
-        left: var(--esp-sm);
-        width: auto;
+        width: calc(100vw - 2 * var(--esp-sm));
+        max-height: 88dvh;
     }
 
     .modal { padding: 0; align-items: flex-end; }
@@ -1490,7 +1462,6 @@ body.con-banner .library-layout {
 
 @media (max-width: 480px) {
     .form-row { grid-template-columns: 1fr; }
-    .menu-filtros { grid-template-columns: 1fr; }
 
     /* La tira de progreso se parte: las tres fechas arriba, la barra debajo
        a lo ancho, en vez de estrujarse en una fila de 320px. */
@@ -1527,12 +1498,5 @@ body.con-banner .library-layout {
     border-color: var(--tema-acento);
 }
 
-/* Estado vacío de la ficha: la columna se reserva siempre, así que tiene que
-   decir para qué sirve en vez de quedarse en blanco. */
-.detail-vacio {
-    margin: 0;
-    padding: var(--esp-lg) var(--esp-sm);
-    color: var(--tinta-tenue);
-    font: italic 13px/1.6 var(--fuente-titulo);
-    text-align: center;
-}
+/* (El estado vacío de la ficha se fue con la columna: la ficha flota y
+   desaparece entera cuando no hay libro, así que no hay hueco que explicar.) */

@@ -577,15 +577,21 @@ function seleccionarLibro(id) {
 
 function cerrarFicha() {
     libroEnFicha = null;
+    // Se esconde el PANEL entero, no solo su cuerpo. Cuando la ficha era una
+    // columna fija del ancho de la sala no se podía ocultar —un hueco de
+    // 310px en blanco se lee como un fallo— y por eso había un texto que
+    // explicaba para qué servía. Flotando sobre la escena no hace falta: si no
+    // hay libro elegido, no hay panel, y lo que queda debajo es la habitación.
+    const ficha = document.getElementById('book-detail');
     const cuerpo = document.getElementById('detail-cuerpo');
-    const vacio = document.getElementById('detail-vacio');
+    if (ficha) ficha.hidden = true;
     if (cuerpo) cuerpo.hidden = true;
-    if (vacio) vacio.hidden = false;
 }
 
 function renderizarFicha(libro) {
     const ficha = document.getElementById('book-detail');
     if (!ficha) return;
+    ficha.hidden = false;
 
     const poner = (id, valor) => {
         const el = document.getElementById(id);
@@ -635,9 +641,7 @@ function renderizarFicha(libro) {
     }
 
     const cuerpo = document.getElementById('detail-cuerpo');
-    const vacio = document.getElementById('detail-vacio');
     if (cuerpo) cuerpo.hidden = false;
-    if (vacio) vacio.hidden = true;
     ficha.scrollTop = 0;
 }
 
@@ -728,7 +732,8 @@ function renderizarEstante(grid, visibles) {
     // Pulsar un lomo rellena la ficha lateral. El modal completo se abre
     // desde ahí, con «Ver notas y detalles»: así el mueble y el detalle se
     // ven a la vez, que es la gracia de la columna.
-    const montado = montarMuro(escena, baldas, abrirEstante, seleccionarLibro, mostrarPista);
+    const montado = montarMuro(escena, baldas, abrirEstante, seleccionarLibro, mostrarPista,
+                               pulsarAccionEscena);
     if (!montado) {
         escena.remove();
         muroEl.insertBefore(crearEstantePlano(baldas), muroEl.querySelector('.estante-espejo'));
@@ -740,7 +745,20 @@ function renderizarEstante(grid, visibles) {
 // que no se leería nada—, así que el título vive aquí, en DOM real.
 let pistaEl = null;
 
-function mostrarPista(libroId, evento) {
+// `sena` es {libroId} para un lomo o {etiqueta} para cualquier otra cosa
+// pulsable: la mesa, la pila, la lámpara, una balda. Recibía solo un id de
+// libro, y eso bastaba mientras hubiera una barra con botones de verdad.
+// Ahora los botones SON objetos de la habitación y no lo parecen, así que esta
+// pista es lo único que cuenta para qué sirve cada uno.
+// Lo que hace cada objeto-botón de la habitación. Es el sustituto entero de la
+// barra: al quitarla, `menu` y `alta` se quedaron sin puerta, y esta es la que
+// tienen ahora. Lo dispara el raycaster de estante3d.js.
+function pulsarAccionEscena(accion) {
+    if (accion === 'menu') return abrirMenu();
+    if (accion === 'alta') return abrirModalLibro();
+}
+
+function mostrarPista(sena, evento) {
     if (!pistaEl) {
         pistaEl = document.createElement('div');
         pistaEl.className = 'estante-pista';
@@ -748,17 +766,23 @@ function mostrarPista(libroId, evento) {
         document.body.appendChild(pistaEl);
     }
 
-    const libro = libroId ? buscarLibro(libroId) : null;
-    if (!libro || !evento) {
+    if (!sena || !evento) {
         pistaEl.hidden = true;
         return;
     }
 
-    pistaEl.innerHTML =
-        '<strong>' + escaparHtml(libro.titulo) + '</strong>' +
-        (libro.autor ? '<span>' + escaparHtml(libro.autor) + '</span>' : '') +
-        '<span class="estante-pista-estado ' + claseEstado(libro.estado) + '">' +
-        escaparHtml(libro.estado) + '</span>';
+    const libro = sena.libroId ? buscarLibro(sena.libroId) : null;
+    if (!libro && !sena.etiqueta) {
+        pistaEl.hidden = true;
+        return;
+    }
+
+    pistaEl.innerHTML = libro
+        ? '<strong>' + escaparHtml(libro.titulo) + '</strong>' +
+          (libro.autor ? '<span>' + escaparHtml(libro.autor) + '</span>' : '') +
+          '<span class="estante-pista-estado ' + claseEstado(libro.estado) + '">' +
+          escaparHtml(libro.estado) + '</span>'
+        : '<strong>' + escaparHtml(sena.etiqueta) + '</strong>';
     pistaEl.hidden = false;
 
     // Se coloca tras medirla, y se repliega si se saldría por la derecha o
@@ -789,17 +813,51 @@ function crearEspejoEstante(baldas, alEnfocar) {
         ).join('');
 
         return '<section><h3><button type="button" data-balda="' + escaparHtml(balda.id) + '">' +
-               'Abrir el estante ' + escaparHtml(balda.nombre) + ' (' + balda.libros.length + ')' +
+               'Ver tema ' + escaparHtml(balda.nombre) + ' (' + balda.libros.length + ')' +
                '</button></h3><ul>' + items + '</ul></section>';
     });
 
-    el.innerHTML = '<h2>Estantería</h2>' + partes.join('');
+    // LAS ACCIONES DE LA HABITACIÓN, y esto dejó de ser opcional con el
+    // rediseño. Mientras hubo barra, el espejo podía limitarse a los libros: el
+    // menú, el alta y la luz eran botones de verdad y se tabulaban solos. Al
+    // quitar la barra, esos botones pasaron a ser una mesa, una pila y una
+    // lámpara DENTRO de un <canvas>, que para el teclado y para un lector de
+    // pantalla no existen. Sin estas tres entradas, la aplicación entera
+    // quedaría a un solo golpe de ratón de distancia y sin alternativa.
+    //
+    // Van primero, antes de las baldas, porque son lo que en la barra estaba
+    // arriba: el orden de tabulación es la barra que ya no se ve.
+    const acciones =
+        '<section><h3>La habitación</h3><ul>' +
+        '<li><button type="button" data-accion="menu">' +
+        'Abrir el menú: buscar, filtrar, colecciones y ajustes</button></li>' +
+        '<li><button type="button" data-accion="alta">Añadir una lectura</button></li>' +
+        '<li><button type="button" data-accion="luz">' +
+        (typeof luzLamparaEncendida === 'function' && !luzLamparaEncendida()
+            ? 'Encender la lámpara' : 'Apagar la lámpara') +
+        '</button></li>' +
+        '</ul></section>';
+
+    el.innerHTML = '<h2>Estantería</h2>' + acciones + partes.join('');
 
     el.addEventListener('click', e => {
         const btnLibro = e.target.closest('button[data-libro]');
         if (btnLibro) return abrirModalEdicion(btnLibro.dataset.libro);
         const btnBalda = e.target.closest('button[data-balda]');
         if (btnBalda) return abrirEstante(btnBalda.dataset.balda);
+        const btnAccion = e.target.closest('button[data-accion]');
+        if (btnAccion) {
+            const a = btnAccion.dataset.accion;
+            if (a === 'luz') {
+                // El mismo camino que pulsar la lámpara en la escena, incluido
+                // el aviso al botón del menú.
+                if (typeof alternarLuzLampara === 'function') alternarLuzLampara();
+                btnAccion.textContent = luzLamparaEncendida()
+                    ? 'Apagar la lámpara' : 'Encender la lámpara';
+                return;
+            }
+            return pulsarAccionEscena(a);
+        }
     });
 
     // Tabular saca el mismo libro que sacaría el ratón: el foco de teclado y
@@ -1540,33 +1598,42 @@ function actualizarAccionesCatalogo() {
     if (nota) nota.hidden = permitido;
 }
 
+// El estado del menú lo lleva el PANEL, no un botón. Lo llevaba el
+// `aria-expanded` de #menu-btn, que era el ··· de la barra; al quitar la barra
+// ese botón dejó de existir y con él el estado. Ahora el menú se abre desde la
+// MESA de la escena, que no es un elemento del DOM y no puede llevar aria de
+// nada, así que la verdad tiene que estar en el propio diálogo.
 function menuAbierto() {
-    return document.getElementById('menu-btn')?.getAttribute('aria-expanded') === 'true';
+    const panel = document.getElementById('menu-panel');
+    return !!panel && !panel.hidden;
 }
 
 function abrirMenu() {
-    const btn = document.getElementById('menu-btn');
     const panel = document.getElementById('menu-panel');
     const velo = document.getElementById('menu-velo');
-    if (!btn || !panel) return;
+    if (!panel) return;
 
     actualizarAccionesCatalogo();
-    btn.setAttribute('aria-expanded', 'true');
     panel.hidden = false;
     if (velo) velo.hidden = false;
+    // La pista del objeto que se acaba de pulsar se queda flotando sobre el
+    // velo si no se retira: el ratón ya no está sobre la escena, así que la
+    // escena nunca va a recibir el pointermove que la apagaría.
+    mostrarPista(null, null);
     // Se abre con el cursor ya en la búsqueda: es lo que más se viene a hacer.
     document.getElementById('search-input')?.focus();
 }
 
 function cerrarMenu() {
-    const btn = document.getElementById('menu-btn');
     const panel = document.getElementById('menu-panel');
     const velo = document.getElementById('menu-velo');
-    if (!btn || !panel) return;
+    if (!panel) return;
 
-    btn.setAttribute('aria-expanded', 'false');
     panel.hidden = true;
     if (velo) velo.hidden = true;
+    // El foco vuelve al lienzo: es el único sitio al que puede volver, porque
+    // fuera de él ya no queda nada tabulable.
+    document.getElementById('estante-raiz')?.querySelector('[data-libro]')?.focus?.();
 }
 
 function alternarMenu() {
@@ -1593,7 +1660,7 @@ function inicializarEventListeners() {
     eventListenersInicializados = true;
 
     // Menú "···": búsqueda, filtro, altas, respaldo y sesión
-    document.getElementById('menu-btn')?.addEventListener('click', alternarMenu);
+    document.getElementById('menu-cerrar')?.addEventListener('click', cerrarMenu);
     document.getElementById('menu-velo')?.addEventListener('click', cerrarMenu);
 
     // Filtros de estado en la barra. Vuelven a pulsarse para desactivarse:

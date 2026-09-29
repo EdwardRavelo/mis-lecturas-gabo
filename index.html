@@ -62,37 +62,96 @@
     </div>
 
     <!-- ================================ -->
-    <!-- Shell: barra, colecciones, sala   -->
+    <!-- La escena Y NADA MÁS                -->
     <!-- ================================ -->
-    <!-- La estructura viene del diseño de Figma. Donde el diseño dibuja una
-         librería en CSS, aquí va el lienzo WebGL: ver css/estante.css. -->
+    <!-- No hay barra, ni nav, ni columnas. El lienzo ocupa la ventana entera y
+         todo lo que antes vivía alrededor cuelga ahora de un objeto de la
+         habitación: la mesa abre este menú, la pila de libros da de alta una
+         lectura, la lámpara se enciende, una balda abre su tema y un lomo abre
+         su ficha. Lo único que queda en HTML por encima de la escena son cosas
+         que se muestran POR ENCIMA y a peticion: el panel de la ficha, el menú
+         y los modales.
+
+         El espejo accesible que app.js pinta dentro de #estante-raiz deja de
+         ser un complemento y pasa a ser la ÚNICA vía de teclado que hay: sin
+         barra no queda un solo control tabulable fuera del lienzo. -->
     <div class="library-layout" style="display:none;">
 
-        <header class="topbar">
-            <div class="brand">
-                <span class="brand-mark" aria-hidden="true">D</span>
-                <p class="brand-name">Diario de Lecturas</p>
+        <main class="library-room">
+            <!-- El mueble. El lienzo WebGL lo monta app.js aquí dentro, y aquí
+                 dentro va también el espejo accesible. -->
+            <div class="bookcase" id="estante-raiz"></div>
+        </main>
+
+        <!-- Ficha del libro elegido: flota sobre la escena y solo existe
+             mientras haya libro. Resume; para editar abre #edit-modal. -->
+        <aside class="book-detail" id="book-detail" hidden>
+            <button class="detail-close" type="button" id="detail-close" aria-label="Cerrar ficha">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+            </button>
+            <!-- Ya no hay texto de «columna vacía». Existía porque la ficha era
+                 una columna fija que no se podía esconder y había que explicar
+                 el hueco; flotando, si no hay libro elegido no hay panel. -->
+
+            <div id="detail-cuerpo" hidden>
+
+            <div class="cover" id="detail-cover">
+                <span class="cover-rule"></span>
+                <small id="detail-tema"></small>
+                <strong id="detail-titulo-tapa"></strong>
+                <span id="detail-autor-tapa"></span>
+                <i>Diario de Lecturas</i>
             </div>
 
-            <div class="status-filters" id="status-filters" aria-label="Filtrar por estado">
-                <button class="status-pill" type="button" data-filter="Leído">
-                    <span class="status-dot read"></span>
-                    <span>Leídos</span>
-                    <strong id="total-leidos">0</strong>
+            <div class="detail-copy">
+                <span class="state-badge" id="detail-estado"></span>
+                <h2 id="detail-titulo"></h2>
+                <p class="author" id="detail-autor"></p>
+
+                <div class="progress-copy">
+                    <span id="detail-progreso-label">Progreso de lectura</span>
+                    <strong id="detail-progreso">0%</strong>
+                </div>
+                <div class="progress-track"><span id="detail-progreso-barra"></span></div>
+
+                <blockquote id="detail-nota" hidden></blockquote>
+
+                <button class="detail-action" type="button" id="btn-ver-detalles">
+                    Ver notas y detalles
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M14 7l5 5-5 5"/></svg>
                 </button>
-                <button class="status-pill" type="button" data-filter="Leyendo">
-                    <span class="status-dot reading"></span>
-                    <span>Leyendo</span>
-                    <strong id="total-leyendo">0</strong>
-                </button>
-                <button class="status-pill" type="button" data-filter="Pendiente">
-                    <span class="status-dot pending"></span>
-                    <span>Pendientes</span>
-                    <strong id="total-pendientes">0</strong>
+            </div>
+            </div>
+        </aside>
+
+        <!-- ================================ -->
+        <!-- El menú: todo lo que había fuera -->
+        <!-- ================================ -->
+        <!-- Se abre pulsando la MESA de la escena. Recoge lo que antes llevaban
+             la barra y el nav: buscar, los filtros de estado con sus recuentos,
+             las colecciones, el alta, el respaldo y la sesión.
+
+             Los `id` son los mismos de siempre a propósito: el cableado de
+             app.js no distingue si un control está en una barra o en un menú,
+             así que mudar el marcado no cuesta ni una línea de JS. -->
+        <div class="menu-velo" id="menu-velo" hidden></div>
+
+        <div class="menu-panel" id="menu-panel" role="dialog" aria-modal="true"
+             aria-label="Menú de la biblioteca" hidden>
+
+            <div class="menu-cabecera">
+                <div class="brand">
+                    <span class="brand-mark" aria-hidden="true">D</span>
+                    <p class="brand-name">Diario de Lecturas</p>
+                </div>
+                <button class="icon-button quiet" type="button" id="menu-cerrar"
+                        aria-label="Cerrar menú">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
                 </button>
             </div>
 
-            <div class="top-actions">
+            <div class="menu-seccion">
+                <span class="menu-titulo">Buscar</span>
                 <div class="search-box" id="search-box">
                     <input type="text" id="search-input" placeholder="Buscar en tu biblioteca"
                            aria-label="Buscar en tu biblioteca" autocomplete="off">
@@ -101,87 +160,44 @@
                         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
                     </button>
                 </div>
-
-                <button class="add-button" type="button" id="btn-nuevo-libro">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                    <span>Añadir libro</span>
-                </button>
-
-                <button class="icon-button quiet" type="button" id="menu-btn"
-                        aria-haspopup="true" aria-expanded="false" aria-controls="menu-panel"
-                        aria-label="Más opciones">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
-                </button>
-            </div>
-        </header>
-
-        <nav class="category-nav" aria-label="Colecciones">
-            <div class="nav-intro">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>
-                <span>Colecciones</span>
-            </div>
-            <!-- La lista la pinta renderizarColecciones() con los temas reales -->
-            <div class="category-list" id="category-list"></div>
-            <p id="cuenta-visibles"></p>
-        </nav>
-
-        <section class="library-room">
-            <div class="ambient-light" aria-hidden="true"></div>
-
-            <div class="shelf-column">
-                <!-- El mueble. El lienzo WebGL lo monta app.js aquí dentro. -->
-                <div class="bookcase" id="estante-raiz"></div>
             </div>
 
-            <!-- Ficha del libro seleccionado. Resume; para editar abre el modal. -->
-            <aside class="book-detail" id="book-detail">
-                <button class="detail-close" type="button" id="detail-close" aria-label="Cerrar ficha">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
-                </button>
-                <!-- Sin libro elegido la columna no se esconde: dejaría un hueco
-                     de 310px en blanco. Enseña a qué sirve. -->
-                <p class="detail-vacio" id="detail-vacio">
-                    Elige un libro del estante para ver su ficha.
-                </p>
-
-                <div id="detail-cuerpo" hidden>
-
-                <div class="cover" id="detail-cover">
-                    <span class="cover-rule"></span>
-                    <small id="detail-tema"></small>
-                    <strong id="detail-titulo-tapa"></strong>
-                    <span id="detail-autor-tapa"></span>
-                    <i>Diario de Lecturas</i>
-                </div>
-
-                <div class="detail-copy">
-                    <span class="state-badge" id="detail-estado"></span>
-                    <h2 id="detail-titulo"></h2>
-                    <p class="author" id="detail-autor"></p>
-
-                    <div class="progress-copy">
-                        <span id="detail-progreso-label">Progreso de lectura</span>
-                        <strong id="detail-progreso">0%</strong>
-                    </div>
-                    <div class="progress-track"><span id="detail-progreso-barra"></span></div>
-
-                    <blockquote id="detail-nota" hidden></blockquote>
-
-                    <button class="detail-action" type="button" id="btn-ver-detalles">
-                        Ver notas y detalles
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M14 7l5 5-5 5"/></svg>
+            <!-- Los recuentos por estado. NO son decoración: los lomos del muro
+                 no llevan texto, así que esta es la única leyenda que nombra los
+                 tres estados en palabras y da su número. Ver CLAUDE.md. -->
+            <div class="menu-seccion">
+                <span class="menu-titulo">Estado</span>
+                <div class="status-filters" id="status-filters" aria-label="Filtrar por estado">
+                    <button class="status-pill" type="button" data-filter="Leído">
+                        <span class="status-dot read"></span>
+                        <span>Leídos</span>
+                        <strong id="total-leidos">0</strong>
+                    </button>
+                    <button class="status-pill" type="button" data-filter="Leyendo">
+                        <span class="status-dot reading"></span>
+                        <span>Leyendo</span>
+                        <strong id="total-leyendo">0</strong>
+                    </button>
+                    <button class="status-pill" type="button" data-filter="Pendiente">
+                        <span class="status-dot pending"></span>
+                        <span>Pendientes</span>
+                        <strong id="total-pendientes">0</strong>
                     </button>
                 </div>
-                </div>
-            </aside>
-        </section>
+            </div>
 
-        <!-- Menú: lo que no cabe en la barra -->
-        <div class="menu-velo" id="menu-velo" hidden></div>
+            <div class="menu-seccion">
+                <span class="menu-titulo">Colecciones</span>
+                <!-- La lista la pinta renderizarColecciones() con los temas reales -->
+                <div class="category-list" id="category-list"></div>
+                <p class="menu-nota" id="cuenta-visibles"></p>
+            </div>
 
-        <div class="menu-panel" id="menu-panel" role="menu" hidden>
             <div class="menu-seccion">
                 <span class="menu-titulo">Añadir</span>
+                <button class="menu-accion" type="button" id="btn-nuevo-libro">
+                    <span class="menu-accion-icono" aria-hidden="true">+</span> Añadir libro
+                </button>
                 <button class="menu-accion" type="button" id="btn-nuevo-tema">
                     <span class="menu-accion-icono" aria-hidden="true">▤</span> Nuevo tema
                 </button>
@@ -196,12 +212,7 @@
 
             <div class="menu-seccion">
                 <span class="menu-titulo">La habitación</span>
-                <!-- La lámpara también se pulsa en la escena, pero un <canvas> no
-                     existe para el teclado ni para el lector de pantalla: sin este
-                     botón el interruptor solo tendría camino de ratón. Misma regla
-                     que el espejo accesible del estante. -->
-                <button class="menu-accion" type="button" id="btn-luz"
-                        aria-pressed="true">
+                <button class="menu-accion" type="button" id="btn-luz" aria-pressed="true">
                     <span class="menu-accion-icono" aria-hidden="true">●</span>
                     <span id="btn-luz-texto">Apagar la lámpara</span>
                 </button>

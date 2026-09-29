@@ -192,26 +192,52 @@ Worst pair `#C07E24` ↔ `#37A06A`: ΔE 8.1 protanopia, 17.7 normal vision. **Do
 without re-running the validator.** This is the third palette in the project's history and the
 third time the check caught something; a designer's eye picks hues, not separations.
 
-### The shell
+### The shell is the scene
 
 ```
 .library-layout  (flex column, 100dvh, never scrolls)
-  .topbar          brand · status filters with counts · search · Añadir libro · ···
-  .category-nav    Colecciones — filters by theme — N volúmenes visibles
-  .library-room    grid: shelf column + detail aside
-      .shelf-column   heading + .bookcase → the WebGL canvas
-      .book-detail    the selected reading
+  .library-room       full bleed, no padding
+      .bookcase       absolute inset 0 -> the WebGL canvas + the accessible mirror
+  .book-detail        floats over the scene, only while a book is chosen
+  .menu-panel         the dialog the table opens
 ```
 
-Filters and search live in the top bar. They spent a while inside the `···` menu, which now
-keeps only what does not fit up there: adding, backup and session.
+There is no top bar and no collections nav. **Everything they carried now hangs off an object in
+the room**, and the mapping is meant to be guessable rather than clever: a spine fills the
+floating detail panel, a plank opens that theme's shelf modal, the lamp switches the light, the
+stack of books on the table adds a reading, and the table itself opens the menu — search, status
+filters, collections, add, backup and session.
 
-**The aside summarises; the modal edits.** Clicking a spine fills `.book-detail` — cover, state,
+Three consequences, and none of them is optional:
+
+- **`mostrarPista()` stopped being a nicety.** It used to name a spine, which has no text. Now it
+  is the only thing that says what an object *does* — these are buttons that do not look like
+  buttons, and an interface made of furniture only works if the furniture says its name on hover.
+  It takes `{libroId}` or `{etiqueta}`; the label lives in `userData.etiqueta` beside the action.
+- **The accessible mirror is now the only keyboard path in the whole application.** While there
+  was a bar, the mirror could get away with listing books: the menu, the add button and the light
+  were real buttons and tabbed by themselves. They are now a table, a pile and a lamp inside a
+  `<canvas>`, which does not exist for the keyboard or a screen reader. `crearEspejoEstante()`
+  therefore opens with the three room actions, before the shelves — the tab order *is* the bar
+  that is no longer drawn. Verified: nothing outside the scene, the modals and the detail panel
+  is tabbable.
+- **The menu's state lives on the panel**, not on a button. It rode on `#menu-btn`'s
+  `aria-expanded`, and that button went with the bar; a table in a WebGL scene carries no aria.
+
+**The panel summarises; the modal edits.** Clicking a spine fills `.book-detail` — cover, state,
 progress, your own comment as the pull quote — and **Ver notas y detalles** opens the existing
-`#edit-modal`, which stays the only place anything is written. That split is what keeps dates,
-comments, state changes and the link working without duplicating the form. The aside is never
-hidden: an empty column 310px wide reads as a bug, so with nothing selected it says what it is
-for.
+`#edit-modal`, which stays the only place anything is written. The panel now floats over the
+scene and disappears entirely when nothing is selected. As a fixed 310px column it could not: an
+empty column that wide reads as a bug, which is why it used to carry a line explaining what it
+was for. Floating, the problem solves itself — no book, no panel, and what shows through is the
+room.
+
+**The scene is full bleed, and the frame it had was removed deliberately.** `.estante-escena` had
+a border, a radius and a double bevel that said *this is a piece set into a page*. Once the scene
+is the whole application, a frame turns it back into an illustration inside something else. Its
+`padding` went for the same reason: the breathing room comes from `encuadrarEscena()`'s 1.03
+margin, which belongs to the **camera**, so it holds while you orbit and zoom. A CSS padding is a
+dead border that does none of that.
 
 The `blockquote` in the aside is the reading's own `comentarios`. The design had a made-up
 literary quote there; inventing one under a real reading would be a small lie.
@@ -229,10 +255,10 @@ It also fixes the reason the orbit was capped at ±30°: the cabinet was planks 
 with no sides, top or bottom, so past that angle you saw it was a façade. With a carcass that
 limit could be loosened.
 
-**The app is a 100dvh shell and the page never scrolls.** Only `.bookcase`, the menu panel, the
-aside and the modal bodies scroll. `.library-room` needs `min-height: 0`, and so does
-`.bookcase`: without it a flex child refuses to shrink below its content and the whole shell
-overflows.
+**The app is a 100dvh shell and the page never scrolls.** Only the menu panel, the detail panel
+and the modal bodies scroll. `.library-room` still needs `min-height: 0`, and `.bookcase` is now
+`position: absolute; inset: 0` inside it — it was a flex child of `.shelf-column`, which went
+with the redesign.
 
 `.library-layout` must keep working as **flex** — `auth.js` sets `appLayout.style.display =
 'flex'` inline when hiding the login, which would override a `display: grid`.
@@ -264,6 +290,13 @@ The signature component, and since the cut of 2026-09-26 the **only** view: no c
 5. **Never two live scenes.** Opening the shelf modal calls `desmontarMuro()` first, and closing it calls `renderizarLibros()` to put the wall back. This is not tidiness: a browser allows on the order of 16 simultaneous WebGL contexts and, when you exceed that, it kills the **oldest** — which is the wall's. Opening and closing shelves quickly left the furniture behind the modal permanently black. With one scene at a time it cannot happen, and the covered wall stops holding video memory.
 
 6. **`estanteDisponible` is the kill switch**, false when `THREE` is missing or the browser gives no WebGL context. `montarMuro()` / `montarEstanteModal()` then return false and `app.js` paints `crearEstantePlano()` instead — the same spines, flat, fully usable. The availability rules in this file are technical, not aesthetic: the redesign lifted the visual invariants, not the rule that the app survives a dead CDN.
+
+   **`.estante-plano` carries its own scrolling and its own padding**, and that became load-bearing
+   with the full-bleed redesign. While the cabinet lived in a padded column the flat shelf had the
+   room's gutter around it and room to grow; now `.bookcase` is `position: absolute; inset: 0` and
+   `.library-room` clips whatever overflows, so six flat shelves would be cut off at the bottom
+   with no way to reach the rest — in exactly the situation where the app has to stay usable,
+   not half of it.
 
 ### Navigating it: wheel to zoom at the cursor, middle-drag to turn
 
@@ -899,13 +932,17 @@ All user-supplied text goes through `escaparHtml()` before being interpolated in
 
 `cargarTodasLasPortadas()` hits Google Books for every book lacking a `portada` and persists what it finds. It skips immediately when nothing is missing. Covers now only ever show in the reading-detail modal, since there are no cards left.
 
-### The `···` menu
+### The menu
 
-What does not fit in the top bar: *Nuevo tema*, *Varias lecturas*, export/import, and the user plus logout. Search, the status filters and *Añadir libro* moved up to the bar with the Figma design; the menu kept the rest. The sidebar itself — theme list, five stat counters, filter row, the stacked status bar, the backup block — was deleted in the cut of 2026-09-26, because the wall already says most of it: the shelves **are** the theme list, each with its own count, and the legend above the canvas carries the three status totals.
+Opened by clicking the **table**. It is no longer an overflow popover hanging off a bar button — it is the only door to search, the status filters, collections, *Añadir libro*, *Nuevo tema*, *Varias lecturas*, the light switch, backup and session. So it is a centred dialog with a real dimmed veil behind it, not a corner panel over a transparent one. The sidebar it replaced — theme list, five stat counters, filter row, stacked status bar, backup block — went in the cut of 2026-09-26.
+
+The markup moved but **the ids did not**, on purpose: `app.js` never cared whether a control sat in a bar or in a menu, so relocating it cost no JS. What did need changing were the styles that assumed a bar — the search box collapsed from width zero until you opened it, which is absurd inside a dialog you opened *in order to* search, and the stroke-icon rule was scoped to `.topbar` and `.category-nav`, so when those went the icons lost `fill: none` and rendered as solid blobs.
+
+The status counts live in here, and they are **not decoration**: wall spines carry no text, so this is the only legend that names the three states in words and gives their number.
 
 Two things that are easy to get wrong here:
 
 - **`hidden` needs `!important`.** `.menu-panel` is `display: flex`, and any author `display` rule beats the UA stylesheet's `[hidden] { display: none }`. The panel therefore opened on load until `[hidden] { display: none !important; }` went into the reset. The JS uses the attribute as its only switch, so that rule is what makes the switch work at all.
-- **The offline banner is `position: fixed` and 48px tall.** It used to cover only the sidebar's title, which nobody missed; now the legend and the `···` button live up there. `mostrarBannerOffline()` / `ocultarBannerOffline()` toggle `body.con-banner`, and the shell answers with `margin-top` plus a shorter `height`. `--alto-banner` is the single source of that 48.
+- **The offline banner is `position: fixed` and 48px tall.** It used to cover the sidebar's title, then the bar's legend; now there is nothing above the scene for it to cover, so it simply eats 48px off the top of the room. `mostrarBannerOffline()` / `ocultarBannerOffline()` toggle `body.con-banner`, and the shell answers with `margin-top` plus a shorter `height`. `--alto-banner` is the single source of that 48.
 
 There is no analysis panel, no timeline and no charts. `js/charts.js` is gone; its only survivor is `token()`, which moved to the top of `js/estante3d.js`. If a chart is ever wanted again, read the note in "The 3D shelf" about what the wall already encodes before rebuilding one that repeats it.

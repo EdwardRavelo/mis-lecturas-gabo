@@ -18,47 +18,57 @@
    contenedor pasa a display:grid, el muro entra como una celda y el canvas
    sale del tamaño de un sello. Y necesita min-height:0 o, como hijo flex,
    se niega a encoger por debajo de su contenido y desborda el shell. */
+/* La escena ES la ventana. Ya no es una columna dentro de una rejilla con una
+   ficha al lado: .shelf-column desapareció con la barra y el nav, así que esto
+   se ancla a la sala y la llena entera. */
 .bookcase {
-    flex: 1 1 auto;
-    min-height: 0;
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
 }
 
-/* Pista de gestos: girar con la rueda pulsada no lo adivina nadie, y la
-   leyenda que lo decía se fue a la barra superior. */
+/* Pista de gestos: girar con la rueda pulsada no lo adivina nadie, y ahora
+   menos que nunca — no queda un solo botón visible del que deducir nada.
+   Flota sobre la escena en vez de ocupar una línea debajo, porque debajo ya no
+   hay nada: sería robarle alto a la habitación para poner una leyenda. */
 .estante-gestos {
-    flex: 0 0 auto;
-    margin-top: var(--esp-sm);
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    z-index: 5;
+    margin: 0;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: rgba(8, 7, 6, 0.45);
+    backdrop-filter: blur(6px);
     color: var(--tinta-tenue);
     font-size: 11px;
     text-align: center;
+    pointer-events: none;
 }
 
 .estante-muro {
     display: flex;
     flex-direction: column;
-    gap: var(--esp-md);
     height: 100%;
     min-height: 0;
 }
 
+/* A SANGRE. Se le quitaron el borde, el radio y el doble bisel, y no por
+   gusto: esos tres decían "esto es una pieza empotrada en una página". Cuando
+   la escena pasa a ser la aplicación entera, un marco alrededor la convierte
+   otra vez en una ilustración dentro de algo — justo lo contrario de lo que se
+   busca. El fondo tampoco hace ya falta: no asoma por ningún lado.
+
+   Se conserva el grano del ::after, que sí es de la imagen y no del marco. */
 .estante-escena {
     position: relative;      /* ancla del canvas absoluto */
     flex: 1 1 auto;
-    min-height: 320px;
-    border-radius: var(--radio-lg);
+    min-height: 0;
     overflow: hidden;
-
-    /* Doble bisel: carcasa exterior con filo de luz e interior hundido, para
-       que el mueble parezca una pieza empotrada y no una imagen pegada. */
-    background:
-        radial-gradient(120% 80% at 20% 0%, var(--superficie-alta) 0%, var(--superficie-honda) 62%);
-    box-shadow:
-        var(--luz-filo),
-        inset 0 0 90px rgba(8, 5, 3, 0.75),
-        var(--sombra);
-    border: 1px solid var(--borde);
+    background: var(--superficie-honda);
 }
 
 .estante-lienzo {
@@ -131,10 +141,32 @@
    pinta. No intenta imitar el 3D: son los mismos lomos, en plano, legibles.
    La app entera sigue usable. */
 
+/* El respaldo sin WebGL. Es hijo directo de .estante-muro y OCUPA su sitio:
+   `flex: 1 1 auto` con `min-height: 0` para poder encoger, y su propio
+   desplazamiento.
+   Eso ultimo dejo de ser opcional con el rediseño. Mientras el mueble vivía
+   en una columna con relleno, el plano tenía alrededor el hueco de la sala;
+   ahora .bookcase es `position: absolute; inset: 0` y .library-room recorta lo
+   que sobresalga, así que un estante plano de seis baldas se cortaría por
+   abajo sin forma de llegar al resto. Y este es justo el camino que se toma
+   cuando el CDN de Three.js no llega — el caso en el que la app tiene que
+   seguir siendo usable, no a medias.
+   El relleno también es suyo: la sala ya no tiene ninguno. */
 .estante-plano {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: clamp(16px, 3vw, 40px);
     display: flex;
     flex-direction: column;
     gap: var(--esp-lg);
+}
+
+/* Dentro del modal manda el modal: ahí ya hay un cuerpo que se desplaza. */
+.estante-modal-cuerpo .estante-plano {
+    flex: 0 1 auto;
+    overflow: visible;
+    padding: 0;
 }
 
 .estante-plano-balda {

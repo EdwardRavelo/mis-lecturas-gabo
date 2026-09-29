@@ -2500,6 +2500,8 @@ function construirMesa(ancho, fondo, alto) {
     const mesa = new THREE.Group();
 
     const GRUESO = 3.4;
+    // El tablero se guarda porque es lo único de la mesa que lleva acción: ver
+    // construirEscenografia.
     const tapa = new THREE.Mesh(
         new THREE.RoundedBoxGeometry(ancho, GRUESO, fondo, 2, 0.6),
         new THREE.MeshStandardMaterial({
@@ -2512,6 +2514,7 @@ function construirMesa(ancho, fondo, alto) {
     tapa.castShadow = true;
     tapa.receiveShadow = true;
     mesa.add(tapa);
+    mesa.userData.tapa = tapa;
 
     const oscura = new THREE.MeshStandardMaterial({
         color: colorMaterial('--madera-canto', '#39271B'),
@@ -2675,6 +2678,7 @@ function construirLamparaMesa(alto) {
     // Marcada para el raycaster: pulsar la lámpara la apaga. `esLampara` va en
     // el grupo entero, así que vale tanto el clic en la pantalla como en el pie.
     grupo.userData.esLampara = true;
+    grupo.userData.etiqueta = 'Encender o apagar la lámpara';
     grupo.userData.bombilla = bombilla;
     grupo.userData.pantalla = pantalla.material;
     grupo.userData.brilloMaximo = bombilla.intensity;
@@ -2785,6 +2789,27 @@ function construirEscenografia(mueble) {
     pila.rotation.y = 0.34;
     mesa.add(pila);
 
+    // LOS OBJETOS SON LA INTERFAZ. Desde que no hay barra ni menú flotante,
+    // cada cosa que antes era un botón cuelga de una pieza de la habitación.
+    //
+    // El reparto no es arbitrario, es el que hace que se adivine: una pila de
+    // libros sin colocar es lo que se da de alta, y una mesa de trabajo es
+    // donde se busca y se ordena. La lámpara ya se encendía antes.
+    //
+    // Se marca la MESA y no el tablero: userData va en el grupo, y el
+    // raycaster sube por los padres hasta encontrar una marca, así que valen
+    // el tablero, el faldón y las patas. La pila se marca después y gana
+    // porque está más cerca del rayo.
+    // La acción va en el TABLERO, no en la mesa entera. Marcada en el grupo,
+    // las cuatro patas y el faldón respondían también, y son un objeto alto y
+    // estrecho barriendo mucha pantalla a la altura del suelo: pasabas el
+    // cursor camino de cualquier otra cosa y saltaba el menú. Lo que invita a
+    // pulsar una mesa de trabajo es su superficie.
+    mesa.userData.tapa.userData.accion = 'menu';
+    mesa.userData.tapa.userData.etiqueta = 'Buscar, filtrar y ajustes';
+    pila.userData.accion = 'alta';
+    pila.userData.etiqueta = 'Añadir una lectura';
+
     return grupo;
 }
 
@@ -2793,7 +2818,12 @@ let muro = null;
 // `baldas` son {id, nombre, color, libros}: cada una trae ya sus libros, de
 // modo que la balda virtual "Sin tema" (los huérfanos, que no casan con
 // ningún tema_id) se monta igual que las demás.
-function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) {
+// `alPulsarAccion(accion)` es nuevo y lo trae el rediseño: la barra y el nav
+// desaparecieron, así que las acciones que llevaban ahora cuelgan de objetos
+// de la habitación. Recibe 'menu' (la mesa) o 'alta' (la pila de libros); la
+// lámpara se resuelve aquí dentro, porque su estado es de este archivo.
+function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar,
+                    alPulsarAccion) {
     desmontarMuro();
     if (!estanteDisponible) return false;
 
@@ -2986,7 +3016,11 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
     // ---- interacción
     const rayo = new THREE.Raycaster();
     const puntero = new THREE.Vector2();
+    // Dos estados distintos, y confundirlos era un fallo. `resaltado` es el
+    // libro que está sacado del estante, y solo puede ser un libro o nada;
+    // `senalado` es lo último que estuvo bajo el cursor, sea lo que sea.
     let resaltado = null;
+    let senalado = null;
     let girando = false;
     const objetivoZ = new WeakMap();
 
@@ -2998,20 +3032,33 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
     // cámara no cambia ninguna sombra, así que el mapa de sombras congelado
     // sigue valiendo. Rotando el mueble habría que recalcularlo en cada
     // fotograma del hover.
-    const PARALAJE = 5.0;
+    const PARALAJE = 3.4;
     const paralajeObjetivo = new THREE.Vector3();
     const paralajeAplicado = new THREE.Vector3();
     const ejeX = new THREE.Vector3();
     const ejeY = new THREE.Vector3();
     const paso3 = new THREE.Vector3();
 
+    // LA RESPUESTA NO ES LINEAL, y esto es lo que quita el nerviosismo.
+    //
+    // Con una respuesta recta, medio centímetro de ratón en mitad de la
+    // pantalla mueve la cámara lo mismo que medio centímetro en el borde: el
+    // mueble reacciona a cualquier temblor y la escena no se queda nunca
+    // quieta. Elevando al cuadrado —conservando el signo— la zona central se
+    // vuelve casi insensible y el recorrido completo sigue llegando igual de
+    // lejos en los bordes, que es donde uno sí quiere asomarse.
+    //
+    // Es el mismo truco que una zona muerta de mando, pero sin escalón: no hay
+    // un punto donde el movimiento «empiece», simplemente crece despacio.
+    const curva = v => v * Math.abs(v);
+
     function fijarParalaje(x, y) {
         // En ejes de la cámara, no del mundo: si el mueble está girado, el
         // desplazamiento tiene que seguir siendo hacia los lados de quien mira.
         camara.matrixWorld.extractBasis(ejeX, ejeY, paso3);
         paralajeObjetivo.set(0, 0, 0)
-            .addScaledVector(ejeX, x * PARALAJE)
-            .addScaledVector(ejeY, y * PARALAJE * 0.55);
+            .addScaledVector(ejeX, curva(x) * PARALAJE)
+            .addScaledVector(ejeY, curva(y) * PARALAJE * 0.55);
         animar();
     }
 
@@ -3027,24 +3074,48 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
         for (const golpe of golpes) {
             let o = golpe.object;
             while (o && !o.userData?.libroId && !o.userData?.esBalda
-                     && !o.userData?.esLampara) o = o.parent;
+                     && !o.userData?.esLampara && !o.userData?.accion) o = o.parent;
             if (o) return o;
         }
         return null;
     }
 
+    // Lo que hay bajo el cursor, descrito para quien mira. Antes solo se
+    // avisaba de los libros; ahora también de la mesa, la pila y la lámpara,
+    // porque son botones y NO LO PARECEN: sin barra ni menú visible, esta
+    // pista es lo único que cuenta qué hace cada objeto. Una interfaz hecha de
+    // objetos se sostiene sobre que al pasar por encima digan su nombre.
+    function describir(grupo) {
+        if (!grupo) return null;
+        if (grupo.userData.libroId) return { libroId: grupo.userData.libroId };
+        if (grupo.userData.etiqueta) return { etiqueta: grupo.userData.etiqueta };
+        if (grupo.userData.esBalda) return { etiqueta: 'Ver tema' };
+        return null;
+    }
+
     function resaltar(grupo, evento) {
-        if (resaltado === grupo) return;
-        if (resaltado) objetivoZ.set(resaltado, 0);
-        // Solo los libros se levantan al pasar por encima. La lámpara entra
-        // aquí para poner el cursor de mano, pero no se mueve: es un
-        // interruptor, no un objeto que se saca del estante.
-        resaltado = grupo && grupo.userData.libroId ? grupo : null;
-        if (resaltado) objetivoZ.set(resaltado, 3.4);
+        // LA GUARDA VA SOBRE `senalado`, NO SOBRE `resaltado`, y este fue un
+        // fallo real que costaba caro: `resaltado` solo vale un libro o null,
+        // así que al pasar de un objeto-botón —la mesa, la lámpara— a un hueco
+        // vacío, ambos lados de la comparación valían null, la función salía por
+        // aquí y la pista NUNCA se ocultaba. Las etiquetas se quedaban pegadas
+        // por la escena hasta que tocabas un libro o sacabas el ratón del
+        // lienzo, que es la mitad de la sensación de desorden.
+        if (senalado === grupo) return;
+        senalado = grupo;
+
+        // Solo los libros se levantan al pasar por encima. La lámpara, la mesa
+        // y la pila entran aquí para poner el cursor de mano y su pista, pero
+        // no se mueven: son interruptores, no objetos que se sacan del estante.
+        const libro = grupo && grupo.userData.libroId ? grupo : null;
+        if (resaltado !== libro) {
+            if (resaltado) objetivoZ.set(resaltado, 0);
+            if (libro) objetivoZ.set(libro, 3.4);
+            resaltado = libro;
+        }
+
         contenedor.style.cursor = grupo ? 'pointer' : '';
-        // En el muro los lomos no llevan texto: sin esto no hay forma de
-        // saber qué es un libro sin abrirlo. El raycaster ya lo sabe.
-        if (alSenalar) alSenalar(resaltado?.userData.libroId ?? null, evento);
+        if (alSenalar) alSenalar(describir(grupo), evento);
         animar();
     }
 
@@ -3116,7 +3187,11 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
             paso3.subVectors(paralajeObjetivo, paralajeAplicado);
             let paralajeSeMueve = false;
             if (paso3.lengthSq() > 0.0004) {
-                paralajeAplicado.addScaledVector(paso3, 0.10);
+                // 0.055 y no 0.10: el mueble llega al mismo sitio, pero va
+                // detrás del cursor en vez de pegado a él. Pegado se siente
+                // como un objeto agarrado al ratón; detrás, como una vitrina
+                // a la que te asomas.
+                paralajeAplicado.addScaledVector(paso3, 0.055);
                 paralajeSeMueve = true;
             } else {
                 paralajeAplicado.copy(paralajeObjetivo);
@@ -3178,6 +3253,8 @@ function montarMuro(contenedor, baldas, alPulsarTema, alPulsarLibro, alSenalar) 
             alPulsarLibro?.(o.userData.libroId);
         } else if (o.userData.esLampara) {
             alternarLuzLampara();
+        } else if (o.userData.accion) {
+            alPulsarAccion?.(o.userData.accion);
         } else if (o.userData.esBalda) {
             alPulsarTema?.(o.userData.temaId);
         }
